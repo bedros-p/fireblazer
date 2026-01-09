@@ -43,6 +43,7 @@ func main() {
 	// Collect results and process them
 	wg.Wait()
 	log.Println("Successfully retrieved discovery endpoints.")
+	failCount := 0
 
 	discoveryWg := sync.WaitGroup{}
 	for _, item := range discoveryEndpoints {
@@ -54,11 +55,12 @@ func main() {
 				log.Printf("Found discovery endpoint: %s", item.DiscoveryRestUrl)
 			} else if err != nil {
 				log.Printf("Error testing discovery endpoint %s: %v", item.DiscoveryRestUrl, err)
+				failCount++
 			}
 		}(item)
 		time.Sleep(30 * time.Millisecond) // slight delay to avoid overwhelming the client
 	}
 	discoveryWg.Wait()
-	log.Println("All discovery endpoint tests completed.")
+	log.Printf("All discovery endpoint tests completed with %d failures.", failCount)
 
 }
