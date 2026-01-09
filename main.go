@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"sync"
+	"time"
 )
 
 var key = flag.String("apiKey", "", "API key to scan")
@@ -41,8 +42,23 @@ func main() {
 
 	// Collect results and process them
 	wg.Wait()
+	log.Println("Successfully retrieved discovery endpoints.")
+
+	discoveryWg := sync.WaitGroup{}
 	for _, item := range discoveryEndpoints {
-		log.Printf("Found discovery endpoint: %s", item.DiscoveryRestUrl)
+		discoveryWg.Add(1)
+		go func(item utils.DiscoveryItem) {
+			defer discoveryWg.Done()
+			// log.Printf("Testing %v", item.DiscoveryRestUrl)
+			if valid, err := utils.TestKeyServicePair(*key, item); valid {
+				log.Printf("Found discovery endpoint: %s", item.DiscoveryRestUrl)
+			} else if err != nil {
+				log.Printf("Error testing discovery endpoint %s: %v", item.DiscoveryRestUrl, err)
+			}
+		}(item)
+		time.Sleep(30 * time.Millisecond) // slight delay to avoid overwhelming the client
 	}
+	discoveryWg.Wait()
+	log.Println("All discovery endpoint tests completed.")
 
 }
