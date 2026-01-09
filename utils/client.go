@@ -1,6 +1,7 @@
 package fireblazer
 
 import (
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -20,5 +21,17 @@ var GetClient = sync.OnceValue(func() *http.Client {
 	}
 })
 
-// GetClient is now a function that returns a *http.Client.
-// The internal logic is only executed the very first time it is called.
+func ReqWithBackoff(url string, client *http.Client) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for i := range 5 {
+		resp, err = client.Get(url)
+		if err == nil {
+			return resp, nil
+		}
+		time.Sleep(time.Duration(math.Pow(2, float64(i))) * time.Second)
+	}
+
+	return nil, err
+}
