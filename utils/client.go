@@ -13,9 +13,11 @@ var GetClient = sync.OnceValue(func() *http.Client {
 	return &http.Client{
 		// Timeouts and all will be as long as they are right now until a (planned) retry pool is implemented
 		Transport: &http.Transport{
-			MaxConnsPerHost:       1000,
 			IdleConnTimeout:       60 * time.Second,
 			ResponseHeaderTimeout: 20 * time.Second,
+			MaxIdleConns:          1000,
+			MaxConnsPerHost:       1,
+			DisableKeepAlives:     true,
 		},
 		Timeout: 30 * time.Second,
 	}
