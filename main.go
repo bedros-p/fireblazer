@@ -3,7 +3,6 @@ package main
 import (
 	utils "fireblazer/utils"
 	"flag"
-	"fmt"
 	"log"
 	"slices"
 	"strings"
@@ -17,20 +16,25 @@ type APIDetails struct {
 	Title       string
 }
 
+type Service struct {
+	CleanName    string
+	DiscoveryUrl string
+}
+
 func main() {
 	flag.Parse()
 
 	falsePos := []string{
-		"https://digitalassetlinks.googleapis.com/$discovery/rest?version=v1",
-		"https://www.googleapis.com/discovery/v1/apis/oauth2/v2/rest",
-		"https://servicecontrol.googleapis.com/$discovery/rest?version=v2",
-		"https://storage.googleapis.com/$discovery/rest?version=v1",
-		"https://servicecontrol.googleapis.com/$discovery/rest",
-		"https://storage.googleapis.com/$discovery/rest",
+		"digitalassetlinks",
+		"oauth2",
+		"servicecontrol",
+		"storage",
+		"servicecontrol",
+		"storage",
 	}
 	// begin authless discovery endpoint pickup and collect results afterwards, waitgroup
 	var wg sync.WaitGroup
-	gapiServices := make([]string, 0)
+	gapiServices := make([]Service, 0)
 	serviceDetailMap := make(map[string]APIDetails)
 
 	wg.Add(1)
@@ -44,18 +48,12 @@ func main() {
 		}
 
 		for _, endpoint := range discoveryEndpoints {
-			gapiServices = append(gapiServices, endpoint.DiscoveryRestUrl)
-			discoveryDoc := endpoint.DiscoveryRestUrl
+			gapiServices = append(gapiServices, Service{
+				CleanName:    endpoint.Name,
+				DiscoveryUrl: endpoint.DiscoveryRestUrl,
+			})
 
-			if strings.Contains(endpoint.DiscoveryRestUrl, "/$discovery/rest") {
-				parts := strings.Split(endpoint.DiscoveryRestUrl, "/")
-				projectName := parts[2]
-				prefVersion := endpoint.Version
-				discoveryDoc = fmt.Sprintf("https://discovery.googleapis.com/discovery/%s/apis/%s/%s/rest", prefVersion, projectName, prefVersion)
-				gapiServices = append(gapiServices, discoveryDoc)
-			}
-
-			serviceDetailMap[discoveryDoc] = APIDetails{
+			serviceDetailMap[endpoint.Name] = APIDetails{
 				Description: endpoint.Description,
 				Title:       endpoint.Title,
 			}
@@ -67,13 +65,19 @@ func main() {
 		}
 
 		for _, endpoint := range gapiEndpoints {
+			cleanName := strings.Split(endpoint.Host, ".")[0]
+
 			discoveryUrl := "https://" + endpoint.Host + "/$discovery/rest"
-			if !slices.Contains(gapiServices, discoveryUrl) {
-				gapiServices = append(gapiServices, discoveryUrl)
-				serviceDetailMap[discoveryUrl] = APIDetails{
+			if serviceDetailMap[cleanName].Title == "" {
+				serviceDetailMap[cleanName] = APIDetails{
 					Description: endpoint.Description,
 					Title:       endpoint.Title,
 				}
+
+				gapiServices = append(gapiServices, Service{
+					CleanName:    cleanName,
+					DiscoveryUrl: discoveryUrl,
+				})
 			}
 		}
 		wg.Done()
@@ -102,11 +106,11 @@ func main() {
 
 	for _, item := range gapiServices {
 		discoveryWg.Add(1)
-		go func(item string) {
+		go func(item Service) {
 			defer discoveryWg.Done()
 			// log.Printf("Testing %v", item)
-			if valid, err := utils.TestKeyServicePair(*key, item); valid {
-				foundServices = append(foundServices, item)
+			if valid, err := utils.TestKeyServicePair(*key, item.DiscoveryUrl); valid {
+				foundServices = append(foundServices, item.CleanName)
 				// log.Printf("Found discovery endpoint: %s", item)
 			} else if err != nil {
 				log.Printf("Error testing discovery endpoint %s: %v", item, err)
@@ -123,7 +127,7 @@ func main() {
 			// Commented out - I only need to have them here as a reminder, dw, just so i know i should work on those.
 			// log.Printf(" - %s (false positive)\n\t - %s - %s", service, serviceDetailMap[service].Description, serviceDetailMap[service].Title)
 		} else {
-			log.Printf(" - %s \n\t - %s - %s", service, serviceDetailMap[service].Description, serviceDetailMap[service].Title)
+			log.Printf(" - %s.googleapis.com / %s \n\t - %s", service, serviceDetailMap[service].Title, serviceDetailMap[service].Description)
 		}
 	}
 
