@@ -31,6 +31,7 @@ type DiscoveryItem struct {
 	Title            string `json:"title"`
 	Description      string `json:"description"`
 	DiscoveryRestUrl string `json:"discoveryRestUrl"`
+	Version          string `json:"version"`
 	// DocumentationLink string `json:"documentationLink"`
 	Name string `json:"name"`
 }

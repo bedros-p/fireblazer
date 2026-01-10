@@ -3,10 +3,11 @@ package main
 import (
 	utils "fireblazer/m/utils"
 	"flag"
+	"fmt"
 	"log"
 	"slices"
+	"strings"
 	"sync"
-	"time"
 )
 
 var key = flag.String("apiKey", "", "API key to scan")
@@ -44,7 +45,17 @@ func main() {
 
 		for _, endpoint := range discoveryEndpoints {
 			gapiServices = append(gapiServices, endpoint.DiscoveryRestUrl)
-			serviceDetailMap[endpoint.DiscoveryRestUrl] = APIDetails{
+			discoveryDoc := endpoint.DiscoveryRestUrl
+
+			if strings.Contains(endpoint.DiscoveryRestUrl, "/$discovery/rest") {
+				parts := strings.Split(endpoint.DiscoveryRestUrl, "/")
+				projectName := parts[2]
+				prefVersion := endpoint.Version
+				discoveryDoc = fmt.Sprintf("https://discovery.googleapis.com/discovery/%s/apis/%s/%s/rest", prefVersion, projectName, prefVersion)
+				gapiServices = append(gapiServices, discoveryDoc)
+			}
+
+			serviceDetailMap[discoveryDoc] = APIDetails{
 				Description: endpoint.Description,
 				Title:       endpoint.Title,
 			}
@@ -93,16 +104,16 @@ func main() {
 		discoveryWg.Add(1)
 		go func(item string) {
 			defer discoveryWg.Done()
-			// log.Printf("Testing %v", item.DiscoveryRestUrl)
+			// log.Printf("Testing %v", item)
 			if valid, err := utils.TestKeyServicePair(*key, item); valid {
 				foundServices = append(foundServices, item)
-				log.Printf("Found discovery endpoint: %s", item)
+				// log.Printf("Found discovery endpoint: %s", item)
 			} else if err != nil {
 				log.Printf("Error testing discovery endpoint %s: %v", item, err)
 				failCount++
 			}
 		}(item)
-		time.Sleep(10 * time.Millisecond) // slight delay to avoid overwhelming the client
+		// time.Sleep(1 * time.Millisecond) // slight delay to avoid overwhelming the client. QUIC seems to cope and burn with no delay.
 	}
 	discoveryWg.Wait()
 	log.Println("APIs available to this API key:")

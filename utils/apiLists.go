@@ -89,6 +89,7 @@ type GapisApiItem struct {
 	Description string `json:"description"`
 	Title       string `json:"title"`
 	Host        string `json:"hostname"`
+	Version     string `json:"majorVersion"` // This would be the preferred version from what I can tell
 }
 
 type GapisContainer struct {
