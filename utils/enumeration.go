@@ -1,6 +1,9 @@
 package fireblazer
 
-import "log"
+import (
+	"io"
+	"log"
+)
 
 func TestKeyServicePair(apiKey string, item DiscoveryItem) (bool, error) {
 	// this whole program relies on the fact that discovery rest urls are guaranteed to be there on every PUBLIC Google service endpoint.
@@ -16,11 +19,20 @@ func TestKeyServicePair(apiKey string, item DiscoveryItem) (bool, error) {
 	sharedClient := GetClient()
 
 	// TODO : Move all error reqs to a retry pool to be executed after the initial batch with exponential+jitter
-	headRequest, err := sharedClient.Head(authenticatedDiscovery)
+	headRequest, err := sharedClient.Get(authenticatedDiscovery)
 
 	if err != nil {
-		log.Printf("Failed to make HEAD request: %v", err)
+		log.Printf("Failed to make GET request: %v", err)
 		return false, err
 	}
+
+	defer headRequest.Body.Close()
+
+	if headRequest.StatusCode == 404 {
+		body, _ := io.ReadAll(headRequest.Body)
+		log.Printf("Response body for %s: %s", authenticatedDiscovery, string(body))
+	}
+
+	log.Printf("GET request to %s returned status code %d", authenticatedDiscovery, headRequest.StatusCode)
 	return headRequest.StatusCode == 200, nil
 }
