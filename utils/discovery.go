@@ -28,11 +28,11 @@ const discoveryEndpoint = "https://discovery.googleapis.com/discovery/v1/apis?pr
 
 // We don't have to include every field if unused, we'll just use the stuff we want
 type DiscoveryItem struct {
-	Title             string `json:"title"`
-	Description       string `json:"description"`
-	DiscoveryRestUrl  string `json:"discoveryRestUrl"`
-	DocumentationLink string `json:"documentationLink"`
-	Name              string `json:"name"`
+	Title            string `json:"title"`
+	Description      string `json:"description"`
+	DiscoveryRestUrl string `json:"discoveryRestUrl"`
+	// DocumentationLink string `json:"documentationLink"`
+	Name string `json:"name"`
 }
 
 type discoveryListing struct {

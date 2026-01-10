@@ -4,6 +4,7 @@ import (
 	utils "fireblazer/m/utils"
 	"flag"
 	"log"
+	"slices"
 	"sync"
 	"time"
 )
@@ -14,16 +15,28 @@ func main() {
 	flag.Parse()
 	// begin authless discovery endpoint pickup and collect results afterwards, waitgroup
 	var wg sync.WaitGroup
-	var discoveryEndpoints []utils.DiscoveryItem
+	gapiServices := make([]string, 0)
 
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
 		var err error
-		discoveryEndpoints, err = utils.GetDiscoveryEndpoints()
+		discoveryEndpoints, err := utils.GetDiscoveryEndpoints()
+
 		if err != nil {
 			log.Printf("Failed to get discovery endpoints: %v", err)
+		}
+
+		for _, endpoint := range discoveryEndpoints {
+			gapiServices = append(gapiServices, endpoint.DiscoveryRestUrl)
+		}
+
+		gapiEndpoints, err := utils.GetEndpointsFromGapis()
+		for _, endpoint := range gapiEndpoints {
+			if slices.Contains(gapiServices, "https://"+endpoint.Host+"/$discovery/rest") {
+				gapiServices = append(gapiServices, "https://"+endpoint.Host+"/$discovery/rest")
+			}
 		}
 	}()
 
@@ -46,15 +59,15 @@ func main() {
 	failCount := 0
 
 	discoveryWg := sync.WaitGroup{}
-	for _, item := range discoveryEndpoints {
+	for _, item := range gapiServices {
 		discoveryWg.Add(1)
-		go func(item utils.DiscoveryItem) {
+		go func(item string) {
 			defer discoveryWg.Done()
 			// log.Printf("Testing %v", item.DiscoveryRestUrl)
 			if valid, err := utils.TestKeyServicePair(*key, item); valid {
-				log.Printf("Found discovery endpoint: %s", item.DiscoveryRestUrl)
+				log.Printf("Found discovery endpoint: %s", item)
 			} else if err != nil {
-				log.Printf("Error testing discovery endpoint %s: %v", item.DiscoveryRestUrl, err)
+				log.Printf("Error testing discovery endpoint %s: %v", item, err)
 				failCount++
 			}
 		}(item)
