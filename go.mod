@@ -1,4 +1,4 @@
-module fireblazer/m
+module fireblazer
 
 go 1.24
 

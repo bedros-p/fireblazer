@@ -1,7 +1,7 @@
 package main
 
 import (
-	utils "fireblazer/m/utils"
+	utils "fireblazer/utils"
 	"flag"
 	"fmt"
 	"log"
