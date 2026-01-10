@@ -5,6 +5,7 @@ import (
 	"log"
 )
 
+// Some APIs are missing (e.g generativelanguage). No idea how to counter it. Maybe the googleapis github / their protos would have more services named.
 const discoveryEndpoint = "https://discovery.googleapis.com/discovery/v1/apis"
 
 // {
@@ -31,6 +32,7 @@ type DiscoveryItem struct {
 	Description       string `json:"description"`
 	DiscoveryRestUrl  string `json:"discoveryRestUrl"`
 	DocumentationLink string `json:"documentationLink"`
+	Name              string `json:"name"`
 }
 
 type discoveryListing struct {
@@ -53,5 +55,13 @@ func GetDiscoveryEndpoints() ([]DiscoveryItem, error) {
 		return nil, err
 	}
 
-	return discoveryListResponse.Items, nil
+	seen := make(map[string]struct{})
+	var deduplicated []DiscoveryItem
+	for _, item := range discoveryListResponse.Items {
+		if _, ok := seen[item.Name]; !ok {
+			seen[item.Name] = struct{}{}
+			deduplicated = append(deduplicated, item)
+		}
+	}
+	return deduplicated, nil
 }

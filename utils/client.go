@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/quic-go/quic-go/http3"
 )
 
 var sharedClient *http.Client
@@ -12,12 +14,8 @@ var sharedClient *http.Client
 var GetClient = sync.OnceValue(func() *http.Client {
 	return &http.Client{
 		// Timeouts and all will be as long as they are right now until a (planned) retry pool is implemented
-		Transport: &http.Transport{
-			IdleConnTimeout:       60 * time.Second,
-			ResponseHeaderTimeout: 20 * time.Second,
-			MaxIdleConns:          1000,
-			MaxConnsPerHost:       1,
-			DisableKeepAlives:     true,
+		Transport: &http3.Transport{
+			EnableDatagrams: true,
 		},
 		Timeout: 30 * time.Second,
 	}
