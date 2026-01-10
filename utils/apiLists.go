@@ -87,7 +87,7 @@ var apiListGithub = "https://raw.githubusercontent.com/googleapis/googleapis/ref
 // description, name, host
 type GapisApiItem struct {
 	Description string `json:"description"`
-	Name        string `json:"name"`
+	Title       string `json:"title"`
 	Host        string `json:"hostname"`
 }
 
