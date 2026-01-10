@@ -2,6 +2,7 @@ package fireblazer
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
 )
@@ -16,7 +17,7 @@ const keyCheckEndpoint = "https://generativelanguage.googleapis.com/v1beta/model
 
 // Contains all general google-specific shenanigans (behavior that has lore to it kinda)
 
-func TestKeyValidity(apiKey string) bool {
+func TestKeyValidity(apiKey string) (bool, error) {
 	sharedClient := GetClient()
 	// It's a non-billed service that's generally quick to respond, i might change it to use a custom transport with a much shorter timeout since i implemented backoff
 	resp, err := ReqWithBackoff(AppendAPIKeyToURL(keyCheckEndpoint, apiKey), sharedClient)
@@ -24,7 +25,7 @@ func TestKeyValidity(apiKey string) bool {
 		resp.Body.Close()
 		// TODO: Skip verification flag, id rather have it on for now.
 		log.Fatalf("Error testing API key validity: %v\n. Ensure that you can connect to https://generativelanguage.googleapis.com as it's used for checking key validity. To skip primary validation (at risk of invalid results), use the --dangerouslySkipVerification flag.", err)
-		return false
+		return false, err
 	}
 	defer resp.Body.Close()
 
@@ -34,12 +35,17 @@ func TestKeyValidity(apiKey string) bool {
 	// JSON -> .error.message == "API key not valid. Please pass a valid API key." - I dunno if status 400 is reused, safest bet is the error message
 	// 400 shouldn't be reused with listmodels, but I'll be checking edgecases later
 	if result.Error != nil {
-		if result.Error.Message == "API key not valid. Please pass a valid API key." {
-			return false
+		errorMarshal, err := json.Marshal(result)
+		errorString := string(errorMarshal) + " ---- HTTP STATUS " + resp.Status
+		if result.Error.Message == "API key not valid. Please pass a valid API key." || (resp.StatusCode != 200 && resp.StatusCode != 403) {
+			if err != nil {
+				return false, fmt.Errorf("DOUBLE WHAMMY : API Key not valid, JSON marshal for error message failed too. Error->Message: %s", result.Error.Message)
+			}
+			return false, fmt.Errorf("%v", errorString)
 		}
 	}
 
-	return true
+	return true, nil
 }
 
 // URL - parse query parameters and add api key to it

@@ -10,6 +10,7 @@ import (
 )
 
 var key = flag.String("apiKey", "", "API key to scan")
+var dangerouslySkipVerification = flag.Bool("dangerouslySkipVerification", false, "Skip API key verification")
 
 type APIDetails struct {
 	Description string
@@ -89,9 +90,19 @@ func main() {
 			log.Fatal("You must provide an API key. You can pass it as a named flag or as a positional flag. Usage samples: \n - \"fireblaze AIza-key\" \n - \"fireblaze --key=AIza-key\". \nTerminating.")
 		}
 	}
+	if *dangerouslySkipVerification {
+		log.Println("Skipping API key verification.")
+	} else if valid, err := utils.TestKeyValidity(*key); !valid {
+		log.Fatalf(`Invalid API key. 
+If you're sure the key is valid, use the --dangerouslySkipVerification flag [fireblazer --dangerouslySkipVerification AIza-KeYHere]
+And submit an issue at https://github.com/bedros-p/fireblazer - include this error message:
 
-	if !utils.TestKeyValidity(*key) {
-		log.Fatal("Invalid API key.")
+%v
+
+----
+`, err)
+	} else {
+		log.Println("Valid API key, proceeding.")
 	}
 
 	// If valid go ahead and enumerate all enabled services

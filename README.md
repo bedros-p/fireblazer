@@ -22,6 +22,8 @@ Output:
 2026/01/10 06:34:43 All discovery endpoint tests completed with 0 failures.
 ```
 
+The program also checks the validity of the API key. If you're confident it's valid / want to save half a second on the 30 second scan, use --dangerouslySkipVerification. It's not really for saving time, but in case the primary verification method is broken.
+
 Yeah that's all the program does, it just scoops up all the services in use by a cloud project. Enjoy the escalation!
 
 ## Roadmap / Plans
