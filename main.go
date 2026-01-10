@@ -20,7 +20,6 @@ func main() {
 	wg.Add(1)
 
 	go func() {
-		defer wg.Done()
 		var err error
 		discoveryEndpoints, err := utils.GetDiscoveryEndpoints()
 
@@ -33,11 +32,16 @@ func main() {
 		}
 
 		gapiEndpoints, err := utils.GetEndpointsFromGapis()
+		if err != nil {
+			log.Printf("Failed to get supplementary endpoints from Github: %v", err)
+		}
+
 		for _, endpoint := range gapiEndpoints {
-			if slices.Contains(gapiServices, "https://"+endpoint.Host+"/$discovery/rest") {
+			if !slices.Contains(gapiServices, "https://"+endpoint.Host+"/$discovery/rest") {
 				gapiServices = append(gapiServices, "https://"+endpoint.Host+"/$discovery/rest")
 			}
 		}
+		wg.Done()
 	}()
 
 	if *key == "" {

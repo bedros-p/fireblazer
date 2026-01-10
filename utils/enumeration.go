@@ -1,7 +1,6 @@
 package fireblazer
 
 import (
-	"io"
 	"log"
 )
 
@@ -29,10 +28,13 @@ func TestKeyServicePair(apiKey string, service string) (bool, error) {
 	defer headRequest.Body.Close()
 
 	if headRequest.StatusCode == 404 {
-		body, _ := io.ReadAll(headRequest.Body)
-		log.Printf("Response body for %s: %s", authenticatedDiscovery, string(body))
+		// Nothing is unusual with this - i think theres only one that returns 404 when there really isnt a discovery doc.
+		// For the ones without a discovery doc, I'll work on contextless GETs. later.
+		// TODO: Contextless GET edgecases for non-discoverable services
+		// body, _ := io.ReadAll(headRequest.Body)
+		// log.Printf("Response body for %s: %s", authenticatedDiscovery, string(body))
 	}
 
-	log.Printf("GET request to %s returned status code %d", authenticatedDiscovery, headRequest.StatusCode)
+	// log.Printf("GET request to %s returned status code %d", authenticatedDiscovery, headRequest.StatusCode)
 	return headRequest.StatusCode == 200, nil
 }
