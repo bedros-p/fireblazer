@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"slices"
 	"strings"
-	"sync"
+	"time"
 
 	utils "github.com/bedros-p/fireblazer/utils"
 
@@ -17,10 +18,13 @@ import (
 
 var key = flag.String("apiKey", "", "API key to scan. Can also be your first positional arg.")
 var dangerouslySkipVerification = flag.Bool("dangerouslySkipVerification", false, "Skip API key verification")
-var workerCount = flag.Int("workerCount", 100, "Set the amount of worker threads to spawn for executing the requests")
-var outputFormat = flag.String("outputFormat [WIP]", "interactive", "Output format (interactive|text|json|yaml)")
-var outputDetails = flag.String("outputDetails [WIP]", "full", "Comma delimited list of what to include in the details (description|title|name). Comma delimited.")
+var workerCount = flag.Int("workerCount", 170, "Set the amount of worker threads to spawn for executing the requests")
+
+// interactive|text|json|yaml
+var outputFormat = flag.String("outputFormat", "interactive", "[WIP] Output format (interactive|text|json|yaml)")
+var outputDetails = flag.String("outputDetails", "full", "[WIP] Comma delimited list of what to include in the details (description|title|name). Comma delimited.")
 var isInteractive = *outputFormat == "interactive" || *outputFormat == ""
+var timingEnabled = flag.Bool("findSlowService", false, "[DEBUG] Find which service took the longest to test + elapsed time. Use to file an issue for program hangs.")
 
 type APIDetails struct {
 	Description string
@@ -32,21 +36,13 @@ type Service struct {
 	DiscoveryUrl string
 }
 
-// Experimenting with building the stream myself to close as soon as response headers are received. Now I've got a workaround for forcing HEAD :)
-// I was 100% going to make my own http3 client since I already have a QUIC transport. But a short workaround was found :)
+var discoverySourcesFailedMsg string = `
+A number of endpoint sources failed.
+If there's a consistently failing source and the following domains aren't blocked, raise an issue at https://github.com/bedros-p/fireblazer
 
-// func main() {
-// 	req, err := http.NewRequest("GET", "https://generativelanguage.googleapis.com/$discovery/rest", nil)
-// 	if err != nil {
-// 		log.Println("Failed to create new request")
-// 	}
-// 	resp, err := utils.GetClient().Do(req)
-// 	if err != nil {
-// 		log.Println(err)
-// 	}
-// 	// resp := utils.ReqHeaderOnly(*req)
-// 	log.Printf("Resp status round trip : %s \n", resp.Status)
-// }
+- www.googleapis.com
+- raw.githubusercontent.com
+`
 
 func main() {
 	flag.Parse()
@@ -65,12 +61,11 @@ func main() {
 		"poly",
 		"lifesciences",
 	}
-	// begin authless discovery endpoint pickup and collect results afterwards, waitgroup
-	var wg sync.WaitGroup
+
+	discoverySourcesLoaded := make(chan struct{})
+
 	gapiServices := make([]Service, 0)
 	serviceDetailMap := make(map[string]APIDetails)
-
-	wg.Add(1)
 
 	discoveryFailed := 0
 	go func() {
@@ -82,11 +77,12 @@ func main() {
 				log.Printf("Failed to get discovery endpoints: %v", err)
 				discoveryFailed++
 			}
+			if *outputFormat == "json" || *outputFormat == "yaml" {
+				// TODO: JSON and YAML format error handling
+			}
 		}
 
 		for _, endpoint := range discoveryEndpoints {
-
-			// utils.PreresolveHost(endpoint.DiscoveryRestUrl)
 
 			gapiServices = append(gapiServices, Service{
 				CleanName:    endpoint.Name,
@@ -114,7 +110,6 @@ func main() {
 			cleanName := strings.Split(endpoint.Host, ".")[0]
 
 			discoveryUrl := "https://" + endpoint.Host + "/$discovery/rest"
-			// utils.PreresolveHost(discoveryUrl) // it gets stripped down again later - its fine. Rather not have 2 functions to resolve.
 
 			if serviceDetailMap[cleanName].Title == "" {
 				serviceDetailMap[cleanName] = APIDetails{
@@ -128,7 +123,7 @@ func main() {
 				})
 			}
 		}
-		wg.Done()
+		close(discoverySourcesLoaded)
 	}()
 
 	if *key == "" {
@@ -142,96 +137,96 @@ func main() {
 			log.Println("Skipping API key verification.")
 		}
 	} else if valid, err := utils.TestKeyValidity(*key); !valid {
-		log.Fatalf(`Invalid API key. 
-If you're sure the key is valid, use the --dangerouslySkipVerification flag [fireblazer --dangerouslySkipVerification AIza-KeYHere]
-And submit an issue at https://github.com/bedros-p/fireblazer - include this error message:
+		if err != nil {
+			log.Fatalf("Error testing API key validity: %v\n. Ensure that you can connect to https://generativelanguage.googleapis.com as it's used for checking key validity. To skip primary validation (at risk of invalid results), use the --dangerouslySkipVerification flag.", err)
+		}
 
-%v
-
-----
-`, err)
+		log.Println("Invalid API key.")
+		log.Println("If you're sure the key is valid, use the --dangerouslySkipVerification flag [fireblazer --dangerouslySkipVerification AIza-KeYHere]")
+		log.Println("And submit an issue at https://github.com/bedros-p/fireblazer - include this error message:\n%v\n----", err)
+		os.Exit(-1)
 	} else {
 		if isInteractive || *outputFormat == "text" {
 			log.Println("Valid API key, proceeding.")
 		}
 	}
 
-	// If valid go ahead and enumerate all enabled services
+	// Need to wait for the discovery services to load before proceeding w the scan
+	<-discoverySourcesLoaded
 
-	// Collect results and process them
-	wg.Wait()
 	scanPin := pin.New("Scanning...")
 
 	if isInteractive || *outputFormat == "text" {
 		log.Printf("Successfully retrieved %d discovery endpoints - %d endpoint sources failed.", len(gapiServices), discoveryFailed)
 		if discoveryFailed > 0 { // TODO: Local-first approach for endpoints
-			log.Println("A number of endpoint sources failed.\n If there's a consistently failing source and the following domains aren't blocked, raise an issue at https://github.com/bedros-p/fireblazer :")
-			log.Println("- www.googleapis.com \n- raw.githubusercontent.com")
-		}
-		if isInteractive {
-			cancel := scanPin.Start(context.Background())
-			defer cancel()
+			log.Println(discoverySourcesFailedMsg)
 		}
 	}
 
-	failCount := 0
-
-	discoveryWg := sync.WaitGroup{}
-	foundServices := make([]string, 0)
+	if isInteractive {
+		cancel := scanPin.Start(context.Background())
+		defer cancel()
+	}
 
 	type ElapsedCombo struct {
 		serviceClean string
 		timeElapsed  int64
 	}
 
-	// maxTime := &ElapsedCombo{
-	// 	serviceClean: "",
-	// 	timeElapsed:  0,
-	// }
+	maxTime := &ElapsedCombo{
+		serviceClean: "",
+		timeElapsed:  0,
+	}
+
+	var scanGroup errgroup.Group
+	scanGroup.SetLimit(*workerCount)
+
 	rem := len(gapiServices)
+
+	foundServices := make([]string, 0)
 	foundCount := 0 // idw to repeatedly check the length of foundServices
-	var tasks errgroup.Group
-	tasks.SetLimit(*workerCount)
-	// 100 - 4 seconds (my network, ymmv)
+
+	failCount := 0
+
 	for _, item := range gapiServices {
 		if slices.Contains(slices.Concat(blacklisted, falsePos), item.CleanName) {
 			continue
 		}
-		discoveryWg.Add(1)
-		// itemCopy := item
-		tasks.Go(func() error {
-			// 8 Services in scope. %d left...
-			// baseMessage :=
-			defer discoveryWg.Done()
-			// log.Printf("Testing %v", item)
-			// start := time.Now()
+
+		scanGroup.Go(func() error {
+			var start time.Time
+			if *timingEnabled {
+				start = time.Now() // i doubt that this is an expensive operation in ANY way. Still.
+			}
+
 			if valid, err := utils.TestKeyServicePair(*key, item.DiscoveryUrl); valid {
 				foundCount++
 				foundServices = append(foundServices, item.CleanName)
-				// log.Printf("Found discovery endpoint: %s", item)
 			} else if err != nil {
 				log.Printf("Error testing discovery endpoint %s: %v", item, err)
 				failCount++
 			}
 
-			// elapsed := time.Since(start).Milliseconds()
-			// if elapsed > maxTime.timeElapsed {
-			// 	maxTime = &ElapsedCombo{
-			// 		serviceClean: item.CleanName,
-			// 		timeElapsed:  elapsed,
-			// 	}
-			// }
+			if *timingEnabled {
+				start = time.Now()
+				elapsed := time.Since(start).Milliseconds()
+				if elapsed > maxTime.timeElapsed {
+					maxTime = &ElapsedCombo{
+						serviceClean: item.CleanName,
+						timeElapsed:  elapsed,
+					}
+				}
+			}
 
 			rem--
 			go scanPin.UpdateMessage(fmt.Sprintf("Service count - %d in scope. Scanning %d more... %v", foundCount, rem, item.CleanName))
 			return nil
 		})
-		// time.Sleep(1 * time.Millisecond) // slight delay to avoid overwhelming the client. QUIC seems to cope and burn with no delay.
 	}
-	discoveryWg.Wait()
+
+	scanGroup.Wait()
 
 	scanPin.Stop(fmt.Sprintf("Scan complete! Identified %d services available in the project.", foundCount))
-	// log.Printf("Elapsed combo - %v\n\n\n", maxTime) // Code for measuring the longest running one
 	log.Println("APIs available to this API key:")
 
 	for _, service := range foundServices {
@@ -244,5 +239,9 @@ And submit an issue at https://github.com/bedros-p/fireblazer - include this err
 	}
 
 	log.Printf("All discovery endpoint tests completed with %d failures.", failCount)
+
+	if *timingEnabled {
+		log.Printf("Longest running service - %v\n\n\n", maxTime)
+	}
 
 }

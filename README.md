@@ -3,6 +3,8 @@
 Extract all services used by a Google Cloud Platform project with a regular API key like "AIza...".\
 Good for expanding your scope from a mere Firebase key to every service that may be unprotected.
 
+This program does not take rely on any vulnerabilities. It is an INSPECTION UTILITY, *not an exploit*. Pentesters and bug hunters are the intended users. More in the "NOT AN EXPLOIT" section.
+
 ## Installation
 ```bash
 go install github.com/bedros-p/fireblazer@latest
@@ -61,10 +63,23 @@ Enjoy the API key escalation!
 #### Bugs 
 - Every now and then, a network black hole would occur. A retry pool is still necessary for unstable connections, even with all the help this program already gets from using HTTP3.
 
-## Notes
+## NOT AN EXPLOIT
+
+> This program is NOT an exploit in any way.
+
+This whole program relies on the fact that a Discovery endpoint is almost guaranteed to be there on every PUBLIC Google service endpoint, and that it still checks if the project associated with the key uses the intended service for it. This is NOT a design flaw, nor is it a problem.
+
+Google cloud will warn you - restrict your keys. IT even has a big yellow warning sign telling you to restrict it when you make it.
+
+This can't be avoided by any reasonable measure - if Discovery URLs didn't check for key validity, one could easily test each service with one of the actual endpoints. We do, after all, have a list of all the actual endpoints in a service. It would still show whether or not the API key is used in that project, regardless of an invalid payload to the endpoint. Checking if the endpoint payload is valid before checking for the API key is not possible, as most services tie the project data into different responses, and the project ID is inferred from the API key. It would require each service to have a rewrite of checks.\
+Or, they can return zero errors of use and make it silently fail, making life hell for the people that actually want to develop with GCP, in an attempt to safeguard information that doesn't pose much of a security risk. The real security risk is entirely dependent on how securely the project is set up. Just additional safeguarding that ruins DX for something that wouldn't be the root problem anyways.
+
+## Notes 
+
 Uses HTTP3 (QUIC) for less cancelled / retransmitted requests, it's faster. On inferior versions, this would retransmit lots of packets unnecessarily. You can test out the error rate by switching out http3.Transport to a regular http.Transport in `client.go`
 
-Apologies for the sloppy code. Been a while since I've written Go. Or worked on something for more than an hour. Couple of months? Improvements are VERY welcome, even the nits. Though... not the really annoying nits. I mean like, just optimization and better practices.
+The code isn't the best quality. It's been a while since I've done Go, and I didn't want to use AI for this. Not yet anyways. Trying to regain brain function after months of TS only development. Though I suppose Go isn't too far away in terms of brain usage. Improvements are VERY welcome, even the nits. Though, if you're gonna raise an issue for nits, please combine all nits into one issue, just optimization and better practices. 
 
-This took too long to make for such little code.\
-I should probably clean up the comments.
+Only reason I'd want to merge a PR for nits is if it came with an item on the roadmap too. Otherwise, post it as an issue, and I'll get to it :)
+
+This took too long to make for such little code.

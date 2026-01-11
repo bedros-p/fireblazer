@@ -3,7 +3,7 @@ package fireblazer
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"net/http"
 	"net/url"
 )
 
@@ -15,18 +15,18 @@ type GoogleErrorResponse struct {
 
 const keyCheckEndpoint = "https://generativelanguage.googleapis.com/v1beta/models"
 
-// Contains all general google-specific shenanigans (behavior that has lore to it kinda)
+// Contains all general google-specific shenanigans that don't belong elsewhere (behavior that has lore to it kinda)
 
 func TestKeyValidity(apiKey string) (bool, error) {
 	sharedClient := GetClient()
-	// It's a non-billed service that's generally quick to respond, i might change it to use a custom transport with a much shorter timeout since i implemented backoff
-	resp, err := ReqWithBackoff(AppendAPIKeyToURL(keyCheckEndpoint, apiKey), sharedClient)
+	req, _ := http.NewRequest("GET", AppendAPIKeyToURL(keyCheckEndpoint, apiKey), nil)
+	resp, err := ReqWithBackoff(req, sharedClient)
+
 	if err != nil {
 		resp.Body.Close()
-		// TODO: Skip verification flag, id rather have it on for now.
-		log.Fatalf("Error testing API key validity: %v\n. Ensure that you can connect to https://generativelanguage.googleapis.com as it's used for checking key validity. To skip primary validation (at risk of invalid results), use the --dangerouslySkipVerification flag.", err)
 		return false, err
 	}
+
 	defer resp.Body.Close()
 
 	var result GoogleErrorResponse
@@ -48,7 +48,7 @@ func TestKeyValidity(apiKey string) (bool, error) {
 	return true, nil
 }
 
-// URL - parse query parameters and add api key to it
+// Parse query params and append the API key to it.
 func AppendAPIKeyToURL(apiUrl string, apiKey string) string {
 	httpURL, _ := url.Parse(apiUrl)
 	values := httpURL.Query()
