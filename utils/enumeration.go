@@ -2,6 +2,7 @@ package fireblazer
 
 import (
 	"log"
+	"net/http"
 )
 
 func TestKeyServicePair(apiKey string, service string) (bool, error) {
@@ -18,14 +19,20 @@ func TestKeyServicePair(apiKey string, service string) (bool, error) {
 	sharedClient := GetClient()
 
 	// TODO : Move all error reqs to a retry pool to be executed after the initial batch with exponential+jitter
-	headRequest, err := sharedClient.Get(authenticatedDiscovery)
+	req, err := http.NewRequest("HEAD", authenticatedDiscovery, nil)
+	req.Header.Add("X-HTTP-Method-Override", "GET") // Documented in https://docs.cloud.google.com/apis/docs/system-parameters - otherwise, it 404s :)
 
+	// log.Println("Created request, starting round trip")
+	headRequest, err := sharedClient.Transport.RoundTrip(req)
+
+	// log.Printf("Req finished, err handling %v", service)
 	if err != nil {
 		log.Printf("Failed to make GET request: %v", err)
 		return false, err
 	}
-
-	defer headRequest.Body.Close()
+	// log.Printf("Req finished, closing body %v", service)
+	headRequest.Body.Close()
+	// log.Printf("closed body %v", service)
 
 	if headRequest.StatusCode == 404 {
 		// Nothing is unusual with this - i think theres only one that returns 404 when there really isnt a discovery doc.

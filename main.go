@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/yarlson/pin"
+	"golang.org/x/sync/errgroup"
 )
 
 var key = flag.String("apiKey", "", "API key to scan")
@@ -29,6 +30,22 @@ type Service struct {
 	DiscoveryUrl string
 }
 
+// Experimenting with building the stream myself to close as soon as response headers are received. Now I've got a workaround for forcing HEAD :)
+// I was 100% going to make my own http3 client since I already have a QUIC transport. But a short workaround was found :)
+
+// func main() {
+// 	req, err := http.NewRequest("GET", "https://generativelanguage.googleapis.com/$discovery/rest", nil)
+// 	if err != nil {
+// 		log.Println("Failed to create new request")
+// 	}
+// 	resp, err := utils.GetClient().Do(req)
+// 	if err != nil {
+// 		log.Println(err)
+// 	}
+// 	// resp := utils.ReqHeaderOnly(*req)
+// 	log.Printf("Resp status round trip : %s \n", resp.Status)
+// }
+
 func main() {
 	flag.Parse()
 
@@ -39,6 +56,12 @@ func main() {
 		"storage",
 		"servicecontrol",
 		"storage",
+	}
+
+	//  Those don't work / hang the program
+	blacklisted := []string{
+		"poly",
+		"lifesciences",
 	}
 	// begin authless discovery endpoint pickup and collect results afterwards, waitgroup
 	var wg sync.WaitGroup
@@ -153,34 +176,60 @@ And submit an issue at https://github.com/bedros-p/fireblazer - include this err
 
 	discoveryWg := sync.WaitGroup{}
 	foundServices := make([]string, 0)
+
+	type ElapsedCombo struct {
+		serviceClean string
+		timeElapsed  int64
+	}
+
+	// maxTime := &ElapsedCombo{
+	// 	serviceClean: "",
+	// 	timeElapsed:  0,
+	// }
 	rem := len(gapiServices)
 	foundCount := 0 // idw to repeatedly check the length of foundServices
-
+	var tasks errgroup.Group
+	tasks.SetLimit(100)
+	// 100 - 20 seconds
 	for _, item := range gapiServices {
+		if slices.Contains(blacklisted, item.CleanName) {
+			continue
+		}
 		discoveryWg.Add(1)
-		go func(item Service) {
+		// itemCopy := item
+		tasks.Go(func() error {
 			// 8 Services in scope. %d left...
 			// baseMessage :=
 			defer discoveryWg.Done()
 			// log.Printf("Testing %v", item)
+			// start := time.Now()
 			if valid, err := utils.TestKeyServicePair(*key, item.DiscoveryUrl); valid {
 				foundCount++
 				foundServices = append(foundServices, item.CleanName)
-
 				// log.Printf("Found discovery endpoint: %s", item)
 			} else if err != nil {
 				log.Printf("Error testing discovery endpoint %s: %v", item, err)
 				failCount++
 			}
 
-			rem--
-			scanPin.UpdateMessage(fmt.Sprintf("%d services in scope. Scanning %d more...", foundCount, rem))
+			// elapsed := time.Since(start).Milliseconds()
+			// if elapsed > maxTime.timeElapsed {
+			// 	maxTime = &ElapsedCombo{
+			// 		serviceClean: item.CleanName,
+			// 		timeElapsed:  elapsed,
+			// 	}
+			// }
 
-		}(item)
+			rem--
+			go scanPin.UpdateMessage(fmt.Sprintf("%d services in scope. Scanning %d more... %v", foundCount, rem, item.CleanName))
+			return nil
+		})
 		// time.Sleep(1 * time.Millisecond) // slight delay to avoid overwhelming the client. QUIC seems to cope and burn with no delay.
 	}
 	discoveryWg.Wait()
-	scanPin.Stop("Scan complete!")
+
+	scanPin.Stop(fmt.Sprintf("Scan complete! Identified %d services available in the project.", foundCount))
+	// log.Printf("Elapsed combo - %v\n\n\n", maxTime) // Code for measuring the longest running one
 	log.Println("APIs available to this API key:")
 
 	for _, service := range foundServices {
