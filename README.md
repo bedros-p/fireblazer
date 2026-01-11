@@ -3,8 +3,6 @@
 Extract all services used by a Google Cloud Platform project with a regular API key like "AIza...".\
 Good for expanding your scope from a mere Firebase key to every service that may be unprotected.
 
-It is buggy right now (duplicated entries), but no false positives. 
-
 ## Building
 Install all tha dependencies first obv\
 `go build .` creates a binary `fireblazer`
@@ -30,6 +28,7 @@ Yeah that's all the program does, it just scoops up all the services in use by a
 ### Major Features
 - Show which services require OAuth & which require Service Accounts to prevent the pentester from wasting time
 - Suggested actions & quick execs (firebase bucket perm testing)
+- Support multiple output formats (YAML, JSON, Plain text & fancy cli outputs \[spinners\]) (Partial implementation)
 
 ### Patches
 - Use a file containing the endpoints while waiting for the up-to-date stuff to load in from the two sources (GoogleAPIs Github & GoogleAPIs Discovery service). Compare content-length with a HEAD and if there's a change get the new one. Or if you want to contribute do it your way idk just make it good 
@@ -38,12 +37,10 @@ Yeah that's all the program does, it just scoops up all the services in use by a
 - Include project ID in the output. Can be useful for some services.
 
 #### Bugs 
-- Deduplicate properly based on service ID & pick the non-empty description - service ID `logging.googleapis.com` -> `logging`. It's an easy task, I just broke the impl is all with my silly experiment of same-domain stuff and I don't want to revert the commit because I think it has potential (it probably doesn't)
-- Goes too SLOW!!!!!!!!!!!!!!!!!!!!!!!!!
+- 30 seconds for ~400 services, that's way too slow. I've made stuff with Go that reaches ~10k requests a second - though, it was really unstable. Mostly achieved through binding with multiple interfaces.
+- Hell, I've made stuff in JAVASCRIPT that can reach a higher req/s rate, STABLE. 
 
 ## Notes
 Apologies for the sloppy code. Been a while since I've written Go. Or worked on something for more than an hour. Couple of months? Improvements are VERY welcome, even the nits. Though... not the really annoying nits. I mean like, just optimization and better practices.
-
-I'm only publishing this in tha current buggy state because it's 6:52AM and I've been up trying to make this as good as possible since 1AM.
 
 This took too long to make for such little code.
