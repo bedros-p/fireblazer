@@ -37,7 +37,7 @@ var GetClient = sync.OnceValue(func() *http.Client {
 			// },
 			EnableDatagrams: true,
 		},
-		Timeout: 5 * time.Second,
+		Timeout: 20 * time.Second,
 	}
 })
 

@@ -15,8 +15,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var key = flag.String("apiKey", "", "API key to scan")
+var key = flag.String("apiKey", "", "API key to scan. Can also be your first positional arg.")
 var dangerouslySkipVerification = flag.Bool("dangerouslySkipVerification", false, "Skip API key verification")
+var workerCount = flag.Int("workerCount", 100, "Set the amount of worker threads to spawn for executing the requests")
 var outputFormat = flag.String("outputFormat [WIP]", "interactive", "Output format (interactive|text|json|yaml)")
 var outputDetails = flag.String("outputDetails [WIP]", "full", "Comma delimited list of what to include in the details (description|title|name). Comma delimited.")
 var isInteractive = *outputFormat == "interactive" || *outputFormat == ""
@@ -190,8 +191,8 @@ And submit an issue at https://github.com/bedros-p/fireblazer - include this err
 	rem := len(gapiServices)
 	foundCount := 0 // idw to repeatedly check the length of foundServices
 	var tasks errgroup.Group
-	tasks.SetLimit(100)
-	// 100 - 20 seconds
+	tasks.SetLimit(*workerCount)
+	// 100 - 4 seconds (my network, ymmv)
 	for _, item := range gapiServices {
 		if slices.Contains(slices.Concat(blacklisted, falsePos), item.CleanName) {
 			continue
