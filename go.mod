@@ -1,4 +1,4 @@
-module fireblazer
+module github.com/bedros-p/fireblazer
 
 go 1.24
 

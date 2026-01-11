@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	utils "fireblazer/utils"
 	"flag"
 	"fmt"
 	"log"
@@ -10,14 +9,16 @@ import (
 	"strings"
 	"sync"
 
+	utils "github.com/bedros-p/fireblazer/utils"
+
 	"github.com/yarlson/pin"
 	"golang.org/x/sync/errgroup"
 )
 
 var key = flag.String("apiKey", "", "API key to scan")
 var dangerouslySkipVerification = flag.Bool("dangerouslySkipVerification", false, "Skip API key verification")
-var outputFormat = flag.String("outputFormat", "interactive", "Output format (interactive|text|json|yaml)")
-var outputDetails = flag.String("outputDetails", "full", "Comma delimited list of what to include in the details (description|title|name). Comma delimited.")
+var outputFormat = flag.String("outputFormat [WIP]", "interactive", "Output format (interactive|text|json|yaml)")
+var outputDetails = flag.String("outputDetails [WIP]", "full", "Comma delimited list of what to include in the details (description|title|name). Comma delimited.")
 var isInteractive = *outputFormat == "interactive" || *outputFormat == ""
 
 type APIDetails struct {
@@ -192,7 +193,7 @@ And submit an issue at https://github.com/bedros-p/fireblazer - include this err
 	tasks.SetLimit(100)
 	// 100 - 20 seconds
 	for _, item := range gapiServices {
-		if slices.Contains(blacklisted, item.CleanName) {
+		if slices.Contains(slices.Concat(blacklisted, falsePos), item.CleanName) {
 			continue
 		}
 		discoveryWg.Add(1)
@@ -221,7 +222,7 @@ And submit an issue at https://github.com/bedros-p/fireblazer - include this err
 			// }
 
 			rem--
-			go scanPin.UpdateMessage(fmt.Sprintf("%d services in scope. Scanning %d more... %v", foundCount, rem, item.CleanName))
+			go scanPin.UpdateMessage(fmt.Sprintf("Service count - %d in scope. Scanning %d more... %v", foundCount, rem, item.CleanName))
 			return nil
 		})
 		// time.Sleep(1 * time.Millisecond) // slight delay to avoid overwhelming the client. QUIC seems to cope and burn with no delay.
