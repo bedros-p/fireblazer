@@ -3,44 +3,68 @@
 Extract all services used by a Google Cloud Platform project with a regular API key like "AIza...".\
 Good for expanding your scope from a mere Firebase key to every service that may be unprotected.
 
-## Building
-Install all tha dependencies first obv\
-`go build .` creates a binary `fireblazer`
+## Installation
+```bash
+go install github.com/bedros-p/fireblazer@latest
+```
+
+### From source
+
+```
+git clone https://github.com/bedros-p/fireblazer
+go mod download
+go build .
+./fireblazer -h
+```
+
+`go build .` creates a binary `fireblazer`, what happens after that is up to you :)
 
 ## Usage
 Example usage & output\
-`./fireblazer AIzaSyC334f24LundukeS8uSkjWoke18`
+`fireblazer AIzaSyC334f24LundukeS8uSkjWoke18`
 
 Output:
 ```log
-2026/01/10 06:34:22 Successfully retrieved discovery endpoints.
-2026/01/10 06:34:43 APIs available to this API key:
-2026/01/10 06:34:43  - https://generativelanguage.googleapis.com/$discovery/rest 
-	- The Gemini API allows developers to build generative AI applications using Gemini models. Gemini is our most capable model, built from the ground up to be multimodal. It can generalize and seamlessly understand, operate across, and combine different types of information including language, images, audio, video, and code. You can use the Gemini API for use cases like reasoning across text and images, content generation, dialogue agents, summarization and classification systems, and more. - Generative Language API
-2026/01/10 06:34:43 All discovery endpoint tests completed with 0 failures.
+2026/01/11 21:18:35 Valid API key, proceeding.
+2026/01/11 21:18:36 Successfully retrieved 376 discovery endpoints - 0 endpoint sources failed.
+✓ Scan complete! Identified 5 services available in the project.
+2026/01/11 21:18:41 APIs available to this API key:
+2026/01/11 21:18:41  - cloudprofiler.googleapis.com / Cloud Profiler API 
+	- Manages continuous profiling information.
+2026/01/11 21:18:41  - bigtableadmin.googleapis.com / Cloud Bigtable Admin API 
+	- Administer your Cloud Bigtable tables and instances.
+2026/01/11 21:18:41  - container.googleapis.com / Kubernetes Engine API 
+	- Builds and manages container-based applications, powered by the open source Kubernetes technology.
+2026/01/11 21:18:41  - cloudfunctions.googleapis.com / Cloud Functions API 
+	- Manages lightweight user-provided functions executed in response to events.
+2026/01/11 21:18:41  - cloudscheduler.googleapis.com / Cloud Scheduler API 
+	- Creates and manages jobs run on a regular recurring schedule.
+2026/01/11 21:18:41 All discovery endpoint tests completed with 0 failures.
 ```
 
-The program also checks the validity of the API key. If you're confident it's valid / want to save half a second on the 30 second scan, use --dangerouslySkipVerification. It's not really for saving time, but in case the primary verification method is broken.
+The program also checks the validity of the API key. If you're confident it's valid / want to save .2 seconds on the ~5 second scan, use --dangerouslySkipVerification. It's not really for saving time, but in case the primary verification method is broken.
 
-Yeah that's all the program does, it just scoops up all the services in use by a cloud project. Enjoy the escalation!
+Enjoy the API key escalation!
 
 ## Roadmap / Plans
 ### Major Features
+- Support multiple output formats (YAML, JSON, Plain text & fancy cli outputs \[spinners\]) (Partial implementation)
 - Show which services require OAuth & which require Service Accounts to prevent the pentester from wasting time
 - Suggested actions & quick execs (firebase bucket perm testing)
-- Support multiple output formats (YAML, JSON, Plain text & fancy cli outputs \[spinners\]) (Partial implementation)
+- Include project ID in the output. Can be useful for some services.
 
 ### Patches
 - Use a file containing the endpoints while waiting for the up-to-date stuff to load in from the two sources (GoogleAPIs Github & GoogleAPIs Discovery service). Compare content-length with a HEAD and if there's a change get the new one. Or if you want to contribute do it your way idk just make it good 
 - Add special detection methods for the (filtered) false positives (refer to false positives from main.go) - priority would be the GCS API.
-- Need it to go FASTER!!!! I picked QUIC / HTTP3 because I had lots of out-of-order requests messing up, and lots of EOF & conn resets, none of which happened on QUIC. Though I guess I can attribute that to the fact that it's slower now. I had a HEAD-only HTTP2 impl, refer to the commit history if you'd like to make that work I guess?
-- Include project ID in the output. Can be useful for some services.
+- First request should be used for validating the key instead of having an alternate request for it (can possibly be bundled with the first discovery request, or launched during the scan and cancelling when invalid)
 
 #### Bugs 
-- 30 seconds for ~400 services, that's way too slow. I've made stuff with Go that reaches ~10k requests a second - though, it was really unstable. Mostly achieved through binding with multiple interfaces.
-- Hell, I've made stuff in JAVASCRIPT that can reach a higher req/s rate, STABLE. 
+- Every now and then, a network black hole would occur. A retry pool is still necessary for unstable connections, even with all the help this program already gets from using HTTP3.
 
 ## Notes
+Uses HTTP3 (QUIC) for less cancelled / retransmitted requests, it's faster. On inferior versions, this would retransmit lots of packets unnecessarily. You can test out the error rate by switching out http3.Transport to a regular http.Transport in `client.go`
+
 Apologies for the sloppy code. Been a while since I've written Go. Or worked on something for more than an hour. Couple of months? Improvements are VERY welcome, even the nits. Though... not the really annoying nits. I mean like, just optimization and better practices.
 
-This took too long to make for such little code.
+This took too long to make for such little code.\
+I should probably clean up the comments.
