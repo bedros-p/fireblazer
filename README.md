@@ -54,6 +54,7 @@ Enjoy the API key escalation!
 - Show which services require OAuth & which require Service Accounts to prevent the pentester from wasting time
 - Suggested actions & quick execs (firebase bucket perm testing)
 - Include project ID in the output. Can be useful for some services.
+- Support referrer for web-restricted API keys, and other parameters for other origin restrictions
 
 ### Patches
 - Use a file containing the endpoints while waiting for the up-to-date stuff to load in from the two sources (GoogleAPIs Github & GoogleAPIs Discovery service). Compare content-length with a HEAD and if there's a change get the new one. Or if you want to contribute do it your way idk just make it good 

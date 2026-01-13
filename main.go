@@ -52,8 +52,6 @@ func main() {
 		"oauth2",
 		"servicecontrol",
 		"storage",
-		"servicecontrol",
-		"storage",
 	}
 
 	//  Those don't work / hang the program
