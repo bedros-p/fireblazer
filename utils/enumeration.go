@@ -10,7 +10,7 @@ import (
 	"net/textproto"
 )
 
-func TestKeyServicePair(apiKey string, service string) (bool, error) {
+func TestKeyServicePair(apiKey string, service string, referrer string) (bool, error) {
 
 	authenticatedDiscovery := AppendAPIKeyToURL(service, apiKey)
 	sharedClient := GetClient()
@@ -18,6 +18,9 @@ func TestKeyServicePair(apiKey string, service string) (bool, error) {
 	// TODO : Move all error reqs to a retry pool to be executed after the initial batch with exponential+jitter
 	req, err := http.NewRequest("HEAD", authenticatedDiscovery, nil)
 	req.Header.Add("X-HTTP-Method-Override", "GET") // Documented in https://docs.cloud.google.com/apis/docs/system-parameters - otherwise, it 404s :)
+	if referrer != "" {
+		req.Header.Add("Referer", referrer)
+	}
 
 	headRequest, err := sharedClient.Transport.RoundTrip(req)
 

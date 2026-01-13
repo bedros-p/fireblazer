@@ -17,6 +17,7 @@ import (
 )
 
 var key = flag.String("apiKey", "", "API key to scan. Can also be your first positional arg.")
+var referrer = flag.String("referrer", "", "Set the referrer (Referer:) header for when an API key is restricted to a website.")
 var dangerouslySkipVerification = flag.Bool("dangerouslySkipVerification", false, "Skip API key verification")
 var workerCount = flag.Int("workerCount", 170, "Set the amount of worker threads to spawn for executing the requests")
 
@@ -200,7 +201,7 @@ func main() {
 				start = time.Now() // i doubt that this is an expensive operation in ANY way. Still.
 			}
 
-			if valid, err := utils.TestKeyServicePair(*key, item.DiscoveryUrl); valid {
+			if valid, err := utils.TestKeyServicePair(*key, item.DiscoveryUrl, *referrer); valid {
 				foundCount++
 				foundServices = append(foundServices, item.CleanName)
 			} else if err != nil {
