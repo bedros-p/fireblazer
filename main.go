@@ -47,6 +47,9 @@ If there's a consistently failing source and the following domains aren't blocke
 func main() {
 	flag.Parse()
 
+	// utils.MultipartAllDiscoveries(*key, []string{"generativelanguage.googleapis.com", "discovery.googleapis.com"})
+	// return
+
 	falsePos := []string{
 		"digitalassetlinks",
 		"oauth2",

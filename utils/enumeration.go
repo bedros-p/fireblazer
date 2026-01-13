@@ -1,8 +1,13 @@
 package fireblazer
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 )
 
 func TestKeyServicePair(apiKey string, service string) (bool, error) {
@@ -30,4 +35,47 @@ func TestKeyServicePair(apiKey string, service string) (bool, error) {
 	}
 
 	return headRequest.StatusCode == 200, nil
+}
+
+// WIP - just need to figure out how to use this damn thing
+func MultipartAllDiscoveries(apiKey string, cleannames []string) (map[string]bool, error) {
+	var buf bytes.Buffer
+
+	w := multipart.NewWriter(&buf)
+
+	for i, service := range cleannames {
+		// host, _ := url.Parse(service)
+
+		field := make(textproto.MIMEHeader)
+		field.Add("Host", service)
+
+		field.Add("Content-ID", fmt.Sprintf("%d:23923944", i))
+		field.Add("Content-Type", "application/http")
+		part, _ := w.CreatePart(field)
+		// part.Write([]byte("GET /$discovery/rest" + apiKey))
+
+		// part.Write([]byte("GET /discovery/" + strings.Split(host.Hostname(), ".")[0] + "/apis?key="+ apiKey))
+		// part.Write([]byte("GET /discovery/v1/apis/" + service + "/v1/rest?key=" + apiKey))
+		part.Write([]byte("GET /apis/" + service + "/v1/rest?key=" + apiKey))
+	}
+	// https://discovery.googleapis.com/discovery/v1/apis/abusiveexperiencereport/v1/rest
+	w.Close()
+	body, err := io.ReadAll(&buf)
+	log.Println(string(body))
+	// return nil, nil
+	req, _ := http.NewRequest("GET", "https://discovery.googleapis.com/batch/discovery/v1", &buf)
+	req.Header.Set("Content-Type", "multipart/mixed; boundary="+w.Boundary())
+
+	client := GetClient()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Something broke %v", err)
+	}
+	defer resp.Body.Close()
+	bodyContent, _ := io.ReadAll(resp.Body)
+
+	log.Printf(string(bodyContent))
+
+	return nil, nil
 }
