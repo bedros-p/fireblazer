@@ -8,24 +8,29 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 )
 
 func TestKeyServicePair(apiKey string, service string, referrer string) (bool, error) {
 
+	host, _ := url.Parse(service)
+	hostname := host.Hostname()
+
 	authenticatedDiscovery := AppendAPIKeyToURL(service, apiKey)
-	sharedClient := GetClient()
+	// sharedClient := GetClient()
 
 	// TODO : Move all error reqs to a retry pool to be executed after the initial batch with exponential+jitter
-	req, err := http.NewRequest("HEAD", authenticatedDiscovery, nil)
+	req, _ := http.NewRequest("HEAD", authenticatedDiscovery, nil)
+	req.Header.Add("Host", hostname)
 	req.Header.Add("X-HTTP-Method-Override", "GET") // Documented in https://docs.cloud.google.com/apis/docs/system-parameters - otherwise, it 404s :)
 	if referrer != "" {
 		req.Header.Add("Referer", referrer)
 	}
 
-	headRequest, err := sharedClient.Transport.RoundTrip(req)
+	headRequest, err := ReqHeaderOnly(*req, false)
 
 	if err != nil {
-		log.Printf("Failed to make GET request: %v", err)
+		log.Printf("Failed to make HEAD request (with X-HTTP-Method-Override: GET): %v", err)
 		return false, err
 	}
 

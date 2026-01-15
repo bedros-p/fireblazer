@@ -1,6 +1,7 @@
 package fireblazer
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -24,7 +25,13 @@ type GapisContainer struct {
 }
 
 func GetEndpointsFromGapis() ([]GapisApiItem, error) {
-	client := http.DefaultClient // Github doesn't seem to like QUIC - using regular client
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// InsecureSkipVerify: true, // If you want to intercept the traffic with mitmproxy
+			},
+		},
+	} // Github doesn't seem to like QUIC - using regular client
 
 	body, err := client.Get(apiListGithub)
 	if err != nil {

@@ -240,6 +240,8 @@ func main() {
 		}
 	}
 
+	utils.KeyLogFile.Close()
+
 	log.Printf("All discovery endpoint tests completed with %d failures.", failCount)
 
 	if *timingEnabled {
