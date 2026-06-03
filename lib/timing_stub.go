@@ -12,7 +12,7 @@ func TrackTime(name string) func() {
 // TrackTimeSince is a no-op in production builds.
 func TrackTimeSince(name string, start time.Time) {}
 
-// TrackWorkerSampleTime is a no-op in production builds.
-func TrackWorkerSampleTime(name string) func() {
+// TrackWorkerWaveSample is a no-op in production builds.
+func TrackWorkerWaveSample(name string, index int, batchSize int) func() {
 	return func() {}
 }

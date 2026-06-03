@@ -149,9 +149,9 @@ func ScanServices(target TargetKey, gapiServices []Service, workerCount int, tim
 	var failMutex sync.Mutex
 	failCount := 0
 
-	for _, item := range gapiServices {
+	for i, item := range gapiServices {
 		scanGroup.Go(func() error {
-			defer TrackWorkerSampleTime("Worker " + item.CleanName)()
+			defer TrackWorkerWaveSample("Worker "+item.CleanName, i, workerCount)()
 			var start time.Time
 			if timingEnabled {
 				start = time.Now()

@@ -129,7 +129,9 @@ func getSharedH3Conn(ctx context.Context, customTransport *http3.Transport, host
 
 	conn := customTransport.NewClientConn(dialer)
 
+	tHandshake := TrackTime("QUIC Handshake to " + destAddr)
 	<-dialer.HandshakeComplete()
+	tHandshake()
 
 	h3ConnMap[connKey] = conn
 	return conn, nil
@@ -142,7 +144,11 @@ func ReqHeaderOnly(req http.Request, apiKey string, useActualResolvedName bool) 
 	defer cancel()
 
 	customTransport := GetClient().Transport.(*http3.Transport)
+	
+	tConn := TrackTime("getSharedH3Conn for " + hostname)
 	conn, err := getSharedH3Conn(ctx, customTransport, hostname, apiKey, useActualResolvedName)
+	tConn()
+
 	if err != nil {
 		if useActualResolvedName {
 			log.Printf("Couldn't dial service %v even when resolving with the proper domain.", hostname)
