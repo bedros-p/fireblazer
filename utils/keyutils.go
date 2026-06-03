@@ -50,6 +50,7 @@ func ParseTargetKey(raw string, globalRef string) lib.TargetKey {
 }
 
 func ProcessKey(target lib.TargetKey, gapiServices []lib.Service, updateCh chan lib.ScanUpdate, logCh chan string, cfg ProcessConfig) KeyResult {
+	defer lib.TrackTime("ProcessKey for " + target.Raw)()
 	res := KeyResult{Key: target.Raw}
 	if cfg.DangerouslySkipVerification {
 		if cfg.IsInteractive && logCh != nil {

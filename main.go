@@ -48,6 +48,7 @@ type APIDetails struct {
 // might just have some utility `fireblazer describe`. I lowk want to make a sep tool for quick single service surface mapping, it might work better there.
 
 func main() {
+	defer lib.TrackTime("Total Execution")()
 	flag.Parse()
 
 	detailsMode := *outputDetails
@@ -76,7 +77,9 @@ func main() {
 	if isInteractive {
 		cancel = scanPin.Start(context.Background())
 	}
+	tLoad := lib.TrackTime("Load Services")
 	gapiServices := loadServices(*targetApi)
+	tLoad()
 
 	rawKeys := []string{}
 	if *key != "" {
