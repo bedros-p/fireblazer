@@ -3,6 +3,8 @@ package fireblazer
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
+	"golang.org/x/sync/errgroup"
 	"log"
 	"math"
 	"net"
@@ -77,35 +79,53 @@ func ReqWithBackoff(req *http.Request, client *http.Client) (*http.Response, err
 }
 
 var (
-	h3Mutex          sync.Mutex
-	sharedTransports = make(map[string]*quic.Transport)
-	h3ConnMap        = make(map[string]*http3.ClientConn)
+	h3Mutex           sync.Mutex
+	sharedTransports  = make(map[string]*quic.Transport)
+	h3ConnMap         = make(map[string]*http3.ClientConn)
+	CachedGoogleApiIp string
 )
 
-func getSharedH3Conn(ctx context.Context, customTransport *http3.Transport, hostname string, apiKey string, useActualResolvedName bool) (*http3.ClientConn, error) {
-	h3Mutex.Lock()
-	defer h3Mutex.Unlock()
-
+func getSharedH3Conn(ctx context.Context, customTransport *http3.Transport, hostname string, poolIndex int, useActualResolvedName bool) (*http3.ClientConn, error) {
 	var destAddr string
+	var actualIp string
 	if useActualResolvedName {
 		destAddr = hostname + ":443"
+		actualIp = destAddr
 	} else {
 		destAddr = "googleapis.com:443"
+		// Protect the IP cache check/set
+		h3Mutex.Lock()
+		if CachedGoogleApiIp == "" {
+			resolved, err := net.ResolveUDPAddr("udp", destAddr)
+			if err != nil {
+				h3Mutex.Unlock()
+				return nil, err
+			}
+			CachedGoogleApiIp = resolved.IP.String() + ":443"
+		}
+		actualIp = CachedGoogleApiIp
+		h3Mutex.Unlock()
 	}
 
-	connKey := apiKey + "|" + destAddr
+	connKey := fmt.Sprintf("%d|%s", poolIndex, destAddr)
 
+	// Check connection cache safely
+	h3Mutex.Lock()
 	if conn, ok := h3ConnMap[connKey]; ok {
+		h3Mutex.Unlock()
 		return conn, nil
 	}
+	h3Mutex.Unlock() // Unlock for network IO!
 
-	resolvedRemote, err := net.ResolveUDPAddr("udp", destAddr)
+	resolvedRemote, err := net.ResolveUDPAddr("udp", actualIp)
 	if err != nil {
 		return nil, err
 	}
 
 	raddrStr := resolvedRemote.IP.String()
 
+	// Protect transport map safely
+	h3Mutex.Lock()
 	tr, ok := sharedTransports[raddrStr]
 	if !ok {
 		resolvedHost, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
@@ -114,6 +134,7 @@ func getSharedH3Conn(ctx context.Context, customTransport *http3.Transport, host
 		}
 		host, err := net.ListenUDP("udp", resolvedHost)
 		if err != nil {
+			h3Mutex.Unlock()
 			return nil, err
 		}
 		tr = &quic.Transport{
@@ -121,7 +142,9 @@ func getSharedH3Conn(ctx context.Context, customTransport *http3.Transport, host
 		}
 		sharedTransports[raddrStr] = tr
 	}
+	h3Mutex.Unlock() // Unlock for network IO!
 
+	// Perform the blocking dial concurrently!
 	dialer, err := tr.DialEarly(ctx, resolvedRemote, customTransport.TLSClientConfig, customTransport.QUICConfig)
 	if err != nil {
 		return nil, err
@@ -133,20 +156,30 @@ func getSharedH3Conn(ctx context.Context, customTransport *http3.Transport, host
 	<-dialer.HandshakeComplete()
 	tHandshake()
 
+	// Safely insert the completed connection
+	h3Mutex.Lock()
+	// Double-check someone else didn't beat us to it while we were dialing
+	if existingConn, ok := h3ConnMap[connKey]; ok {
+		h3Mutex.Unlock()
+		// no conn.Close() for http3.ClientConn, let it drop
+		return existingConn, nil
+	}
 	h3ConnMap[connKey] = conn
+	h3Mutex.Unlock()
+
 	return conn, nil
 }
 
 // For handling errors with a retry for the connection stream itself - otherwise i'd be limited to retrying the domain name resolution / dial
-func ReqHeaderOnly(req http.Request, apiKey string, useActualResolvedName bool) (*http.Response, error) {
+func ReqHeaderOnly(req http.Request, poolIndex int, useActualResolvedName bool) (*http.Response, error) {
 	hostname := req.URL.Hostname()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	customTransport := GetClient().Transport.(*http3.Transport)
-	
+
 	tConn := TrackTime("getSharedH3Conn for " + hostname)
-	conn, err := getSharedH3Conn(ctx, customTransport, hostname, apiKey, useActualResolvedName)
+	conn, err := getSharedH3Conn(ctx, customTransport, hostname, poolIndex, useActualResolvedName)
 	tConn()
 
 	if err != nil {
@@ -156,7 +189,7 @@ func ReqHeaderOnly(req http.Request, apiKey string, useActualResolvedName bool) 
 		} else {
 			log.Printf("Failed to dial service %v resolved from googleapis.com", hostname)
 			log.Println("Retrying with proper raddr")
-			return ReqHeaderOnly(req, apiKey, true)
+			return ReqHeaderOnly(req, poolIndex, true)
 		}
 	}
 
@@ -169,13 +202,13 @@ func ReqHeaderOnly(req http.Request, apiKey string, useActualResolvedName bool) 
 		} else {
 			destAddr = "googleapis.com:443"
 		}
-		connKey := apiKey + "|" + destAddr
+		connKey := fmt.Sprintf("%d|%s", poolIndex, destAddr)
 		delete(h3ConnMap, connKey)
 		h3Mutex.Unlock()
 
 		if !useActualResolvedName {
 			log.Printf("Failed to open stream to service %v via googleapis.com. Retrying with proper raddr", hostname)
-			return ReqHeaderOnly(req, apiKey, true)
+			return ReqHeaderOnly(req, poolIndex, true)
 		}
 		return nil, err
 	}
@@ -190,7 +223,7 @@ func ReqHeaderOnly(req http.Request, apiKey string, useActualResolvedName bool) 
 	if err != nil {
 		if !useActualResolvedName {
 			log.Printf("Failed to read response from stream %v - %v. Retrying with proper raddr.", stream, err)
-			return ReqHeaderOnly(req, apiKey, true)
+			return ReqHeaderOnly(req, poolIndex, true)
 		}
 		log.Printf("Failed to read response from stream %v - %v", stream, err)
 		return nil, err
@@ -198,4 +231,23 @@ func ReqHeaderOnly(req http.Request, apiKey string, useActualResolvedName bool) 
 
 	return resp, nil
 
+}
+
+// WarmupConnections concurrently establishes QUIC connections to googleapis.com to prevent mutex deadlocks and DNS latency during the concurrent scan.
+func WarmupConnections(ctx context.Context, numConns int) {
+	log.Printf("Warming up %d QUIC connection(s) to googleapis.com...", numConns)
+	customTransport := GetClient().Transport.(*http3.Transport)
+
+	var warmupGroup errgroup.Group
+	for i := 0; i < numConns; i++ {
+		i := i // capture loop variable for goroutine
+		warmupGroup.Go(func() error {
+			_, err := getSharedH3Conn(ctx, customTransport, "googleapis.com", i, false)
+			if err != nil {
+				log.Printf("Failed to warmup connection %d: %v", i, err)
+			}
+			return nil
+		})
+	}
+	warmupGroup.Wait()
 }

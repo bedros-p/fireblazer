@@ -36,7 +36,7 @@ func EnumerateServiceAccounts(projectNum string, workerCount int, updateCh chan 
 				}
 
 				// this is actually an unauthed project thing LMAO you could use this for any project ID with no key at all
-				resp, err := ReqHeaderOnly(*req, "", false)
+				resp, err := ReqHeaderOnly(*req, 0, false)
 				if err != nil {
 					return nil
 				}

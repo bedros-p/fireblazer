@@ -52,3 +52,15 @@ My thoughts for the new program flow:
 
 I should instead rename it to batchSize if making this, and worker count as a concept should instead be parallelkeycount.
 
+
+----
+
+This commit will not merge. Ever. This branch exists solely for research.
+
+The additions to main.go is a basic implementation of my thoughts and the basic distribution logic, so I have no problem putting that in. I will take extensive time to ensure the pooling in client.go is as described. So far, the results line up perfectly with what I expected and thats without AI putting in some "This is a placeholder - in a real environment..." - it works really well and doesn't error out... at all? Previously I mentioned in the README that it would drop a bunch of things and lead to a network blackhole. 
+
+Initially I suspected that if we take too long on a stream, the load balancer would kick in and Google would send a PREFERRED_ADDRESS frame to one that isn't busy. But since I was handling Dials and connection streams manually, I figured maybe I'd have to handle it. I tried to get AI to replicate the scenario where I got hit by so many network blackholes. I tried it on a slower, public wifi connection, and most of it got dropped, and this was something i've been aware of for a long time but couldn't identify the root cause, Wireshark was of no help because filtering to the streams I would never actually see that it was the router dropping it all along. But it was the only explanation that made sense. Fed everything I knew to Gemini 3.1 Pro and it worked right then and there, fixing all the black hole issues and convinced it it's not because of ratelimiting or something that silly.
+
+I'm pretty happy with how it turned out. But I am interested, one roundtrip takes 220 ms, this takes 3 seconds per key, which is still pretty quick, but if it really can scale as I outlined, I should be able to push it way down per-key in general.
+
+Still, batching overhead is mostly gone! All of what remains is just how this sorta stuff works. It wouldn't be possible to get a perfect o(1) here. I'll implement the warmup methods first, then work on the balancing.

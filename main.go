@@ -8,6 +8,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	lib "github.com/bedros-p/fireblazer/lib"
 
@@ -34,6 +35,7 @@ var outputFormat = flag.String("outputFormat", "interactive", "Output format (in
 var outputDetails = flag.String("outputDetails", "name", "Comma delimited list of what to include in the details (description|title|name).")
 var timingEnabled = flag.Bool("findSlowService", false, "[DEBUG] Find which service took the longest to test + elapsed time. Use to file an issue for program hangs.")
 var blaze = flag.Bool("blaze", false, "Enable additional aggressive recon checks (e.g., Brand Identity)")
+var maxConnections = flag.Int("maxConnections", 5000, "Maximum number of QUIC connections to pool")
 var isInteractive = false
 
 var scanPin = pin.New("Initializing...")
@@ -121,6 +123,27 @@ func main() {
 		updateCh, logCh, updateDone = startInteractiveDisplay(keys, totalServicesCount, *referrer)
 	}
 
+	// Calculate optimal connection pool size
+	endpointsPerKey := len(gapiServices)
+	// Add 1 to ensure integer division rounds up naturally
+	connectionsPerKey := (endpointsPerKey + *workerCount - 1) / *workerCount
+	numConns := connectionsPerKey * len(keys)
+
+	if numConns > *maxConnections {
+		numConns = *maxConnections
+	}
+	if numConns < 1 {
+		numConns = 1
+	}
+
+	// Warmup Phase
+	if isInteractive || *outputFormat == "text" {
+		log.Printf("Calculated optimal QUIC connection pool size: %d", numConns)
+	}
+	ctxWarmup, cancelWarmup := context.WithTimeout(context.Background(), 15*time.Second)
+	lib.WarmupConnections(ctxWarmup, numConns)
+	cancelWarmup()
+
 	var wg sync.WaitGroup
 	results := make([]utils.KeyResult, len(keys))
 
@@ -136,6 +159,7 @@ func main() {
 				WorkerCount:                 *workerCount,
 				TimingEnabled:               *timingEnabled,
 				UseGet:                      *targetApi != "",
+				MaxConns:                    numConns,
 			}
 			res := utils.ProcessKey(target, gapiServices, updateCh, logCh, cfg)
 

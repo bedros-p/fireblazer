@@ -24,7 +24,7 @@ type TargetKey struct {
 	AndroidCert string
 }
 
-func TestKeyServicePair(target TargetKey, service string, useGet bool) (bool, error) {
+func TestKeyServicePair(target TargetKey, service string, useGet bool, poolIndex int) (bool, error) {
 
 	host, _ := url.Parse(service)
 	hostname := host.Hostname()
@@ -57,7 +57,7 @@ func TestKeyServicePair(target TargetKey, service string, useGet bool) (bool, er
 		req.Header.Add("X-Android-Cert", target.AndroidCert)
 	}
 
-	headRequest, err := ReqHeaderOnly(*req, target.Raw, false)
+	headRequest, err := ReqHeaderOnly(*req, poolIndex, false)
 
 	if err != nil {
 		log.Printf("Failed to make request to %s: %v", service, err)
@@ -132,7 +132,7 @@ type ScanUpdate struct {
 
 // This function is maybe my finest work, but the decrement thing might be better off for interactive mode handled in main.go?
 // Either way, all functioons should strive to be as clear-cut like this. Does its thing and thats it.
-func ScanServices(target TargetKey, gapiServices []Service, workerCount int, timingEnabled bool, updateCh chan<- ScanUpdate, useGet bool) ([]string, int, *ElapsedCombo) {
+func ScanServices(target TargetKey, gapiServices []Service, workerCount int, timingEnabled bool, updateCh chan<- ScanUpdate, useGet bool, maxConns int) ([]string, int, *ElapsedCombo) {
 	defer TrackTime("ScanServices total")()
 	var maxTimeMutex sync.Mutex
 	maxTime := &ElapsedCombo{
@@ -158,7 +158,8 @@ func ScanServices(target TargetKey, gapiServices []Service, workerCount int, tim
 			}
 
 			wasFound := false
-			if valid, err := TestKeyServicePair(target, item.DiscoveryUrl, useGet); valid {
+			poolIndex := i % maxConns
+			if valid, err := TestKeyServicePair(target, item.DiscoveryUrl, useGet, poolIndex); valid {
 				foundMutex.Lock()
 				foundServices = append(foundServices, item.CleanName)
 				foundMutex.Unlock()
