@@ -769,3 +769,16 @@ Servicemanagement API can give all this.
 ```
 
 I'll do a deeper dive on it in a bit - https://servicemanagement.googleapis.com/$discovery/rest - I also have a feeling I can get a nice bug from servicemanagement.
+
+
+curl 'https://developers.google.com/oauthplayground/getEndpoints' \
+  -H 'Accept: application/json, text/javascript, */*; q=0.01' \
+  -H 'Content-Type: application/json' \
+  --data-raw '{"scopes":["https://www.googleapis.com/auth/cloud-platform","https://www.googleapis.com/auth/cloud-platform.read-only","https://www.googleapis.com/auth/service.management","https://www.googleapis.com/auth/servicecontrol"]}'
+
+Intriguing
+
+It's for oauth but it might help get an idea of what may be restricted, takes like 20 seconds for a server response tho.
+The IAM API provides the roles provided in GCP and also the permissions per role. Might be useful to have a guess for the keys role.
+
+
