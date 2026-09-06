@@ -21,7 +21,6 @@
         "airquality.googleapis.com/$discovery/rest",
         "alertcenter.googleapis.com/$discovery/rest",
         "alloydb.googleapis.com/$discovery/rest",
-        "analytics.googleapis.com/$discovery/rest",
         "analyticsadmin.googleapis.com/$discovery/rest",
         "analyticsdata.googleapis.com/$discovery/rest",
         "analyticshub.googleapis.com/$discovery/rest",
@@ -504,7 +503,8 @@
         "subscribewithgoogledeveloper.googleapis.com/$discovery/rest",
         "timeseriesinsights.googleapis.com/$discovery/rest",
         "timezone-backend.googleapis.com/$discovery/rest",
-        "translationhub.googleapis.com/$discovery/rest"
+        "translationhub.googleapis.com/$discovery/rest",
+        "analytics.googleapis.com/$discovery/rest"
     ],
     "fp": [
         "digitalassetlinks",
