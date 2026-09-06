@@ -406,7 +406,6 @@
         "transcoder.googleapis.com/$discovery/rest",
         "transferappliance.googleapis.com/$discovery/rest",
         "translate.googleapis.com/$discovery/rest",
-        "translationhub.googleapis.com/$discovery/rest",
         "travelimpactmodel.googleapis.com/$discovery/rest",
         "travelpartnerprices.googleapis.com/$discovery/rest",
         "usercontext.googleapis.com/$discovery/rest",
@@ -504,7 +503,8 @@
         "storage-component.googleapis.com/$discovery/rest",
         "subscribewithgoogledeveloper.googleapis.com/$discovery/rest",
         "timeseriesinsights.googleapis.com/$discovery/rest",
-        "timezone-backend.googleapis.com/$discovery/rest"
+        "timezone-backend.googleapis.com/$discovery/rest",
+        "translationhub.googleapis.com/$discovery/rest"
     ],
     "fp": [
         "digitalassetlinks",
