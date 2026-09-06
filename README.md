@@ -53,6 +53,8 @@ Usage of ./fireblazer:
     	API key to scan. Can also be your first positional arg.
   -blaze
     	Enable additional aggressive recon checks (e.g., Brand Identity)
+  -projectNumber string
+    	Run Blaze recon (Brand Identity + service accounts) against a GCP project number without an API key. Bypasses the API key scan.
   -dangerouslySkipVerification
     	Skip API key verification (Note: This stops Blaze mode from working since it requires a Project ID)
   -findSlowService

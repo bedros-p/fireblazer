@@ -782,3 +782,76 @@ It's for oauth but it might help get an idea of what may be restricted, takes li
 The IAM API provides the roles provided in GCP and also the permissions per role. Might be useful to have a guess for the keys role.
 
 
+
+All the default service accounts are listed in here: https://docs.cloud.google.com/iam/docs/service-agents#bigquery-connection-service-agent
+
+There are more formats than the ones fireblazer scans for, but it feels redundant too have most since it just checks for api enablement and i think all the services that can be detected thru service accoutns *are* gertting picked up by service accoutns. Still, I fed the markdown to an llm, and here is what I got
+
+# Service Account Formats, categorized by an LLM
+Based on the documentation provided, here are all the unique service account email formats extracted and categorized. 
+
+To make the patterns clear, placeholders are represented as `{PROJECT_NUMBER}`, `{FOLDER_NUMBER}`, `{ORGANIZATION_NUMBER}`, `{IDENTIFIER}`, and `{product}` (which represents the specific service name or abbreviation used by GCP).
+
+### 1. Standard Formats (Project, Folder, and Org level)
+These follow the standard `gcp-sa-` (Service Agent) or `gcp-ri-` (Resource Identity) structure.
+*   `service-{PROJECT_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com` *(The most common format)*
+*   `service-{PROJECT_NUMBER}@gcp-ri-{product}.iam.gserviceaccount.com`
+*   `service-p{PROJECT_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `service-f{FOLDER_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `service-folder-{FOLDER_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `service-o{ORGANIZATION_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `service-org-{ORGANIZATION_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `organizations-{ORGANIZATION_NUMBER}@gcp-sa-{product}.iam.gserviceaccount.com`
+
+### 2. Formats with Unique Instance Identifiers
+Some services (like Cloud SQL, BigQuery Connection, and Backup/DR) append an alphanumeric identifier to the resource number.
+*   `p{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `f{FOLDER_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `o{ORGANIZATION_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `p-{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `b{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `c-{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `bqcx-{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `blirc-{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `vault-{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+*   `connection-{PROJECT_NUMBER}-{IDENTIFIER}@gcp-sa-{product}.iam.gserviceaccount.com`
+
+### 3. Service-Specific Legacy / Custom Domains
+Many core or older Google Cloud services have hardcoded email domains rather than the standard `gcp-sa-{product}` format.
+*   `service-{PROJECT_NUMBER}@compute-system.iam.gserviceaccount.com` *(Compute Engine)*
+*   `service-{PROJECT_NUMBER}@container-engine-robot.iam.gserviceaccount.com` *(GKE)*
+*   `service-{PROJECT_NUMBER}@serverless-robot-prod.iam.gserviceaccount.com` *(Cloud Run)*
+*   `service-{PROJECT_NUMBER}@gae-api-prod.iam.gserviceaccount.com` *(App Engine Flex)*
+*   `service-{PROJECT_NUMBER}@gcp-gae-service.iam.gserviceaccount.com` *(App Engine Standard)*
+*   `service-{PROJECT_NUMBER}@cloudcomposer-accounts.iam.gserviceaccount.com` *(Cloud Composer)*
+*   `service-{PROJECT_NUMBER}@dataflow-service-producer-prod.iam.gserviceaccount.com` *(Dataflow)*
+*   `service-{PROJECT_NUMBER}@dataproc-accounts.iam.gserviceaccount.com` *(Dataproc)*
+*   `service-{PROJECT_NUMBER}@cloud-ml.iam.gserviceaccount.com` *(Cloud ML Engine)*
+*   `service-{PROJECT_NUMBER}@gcf-admin-robot.iam.gserviceaccount.com` *(Cloud Functions)*
+*   `service-{PROJECT_NUMBER}@containerregistry.iam.gserviceaccount.com` *(Container Registry)*
+*   `service-{PROJECT_NUMBER}@gs-project-accounts.iam.gserviceaccount.com` *(Google Storage)*
+*   `service-{PROJECT_NUMBER}@cloud-filer.iam.gserviceaccount.com` *(Cloud Filestore)*
+*   `service-{PROJECT_NUMBER}@cloud-memcache-sa.iam.gserviceaccount.com` *(Memorystore Memcached)*
+*   `service-{PROJECT_NUMBER}@cloud-redis.iam.gserviceaccount.com` *(Memorystore Redis)*
+*   `service-{PROJECT_NUMBER}@cloud-tpu.iam.gserviceaccount.com` *(TPU)*
+*   `service-{PROJECT_NUMBER}@container-analysis.iam.gserviceaccount.com` *(Container Analysis)*
+*   `service-{PROJECT_NUMBER}@dlp-api.iam.gserviceaccount.com` *(DLP)*
+*   `service-{PROJECT_NUMBER}@firebase-rules.iam.gserviceaccount.com` *(Firebase Rules)*
+*   `service-{PROJECT_NUMBER}@remotebuildexecution.iam.gserviceaccount.com` *(Remote Build Execution)*
+*   `service-{PROJECT_NUMBER}@service-consumer-management.iam.gserviceaccount.com` *(Service Consumer Management)*
+*   `service-{PROJECT_NUMBER}@service-networking.iam.gserviceaccount.com` *(Service Networking)*
+*   `bq-{PROJECT_NUMBER}@bigquery-encryption.iam.gserviceaccount.com` *(BigQuery Encryption)*
+*   `service-{PROJECT_NUMBER}@security-center-api.iam.gserviceaccount.com` *(Security Command Center - Project)*
+*   `service-org-{ORGANIZATION_NUMBER}@security-center-api.iam.gserviceaccount.com` *(Security Command Center - Org)*
+
+### 4. Special/Unique Prefix Formats
+These either don't start with `service-` or don't include the standard `iam.gserviceaccount.com` suffix.
+*   `{PROJECT_NUMBER}@cloudservices.gserviceaccount.com` *(Google APIs Service Agent)*
+*   `{PROJECT_NUMBER}@cloudbuild.gserviceaccount.com` *(Legacy Cloud Build)*
+*   `project-{PROJECT_NUMBER}@storage-transfer-service.iam.gserviceaccount.com` *(Storage Transfer Service)*
+*   `service-agent-manager@system.gserviceaccount.com` *(Service Agent Manager - Global/No Project Number)*
+
+
+----
+
+pretty good, but i should note that some are enabled by default for all gcp projects with no ties to anything else. Mainly service-agent-manager and 

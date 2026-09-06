@@ -107,7 +107,11 @@ func MarshalText(results []KeyResult, keys []string, targetApi string, timingEna
 			}
 		}
 
-		buf.WriteString(fmt.Sprintf("\nAPIs available to this API key with project ID %s:\n", res.ProjectId))
+		if res.IsProjectNumber {
+			buf.WriteString(fmt.Sprintf("\n[Blaze] Recon for project number %s (no API key):\n", res.ProjectId))
+		} else {
+			buf.WriteString(fmt.Sprintf("\nAPIs available to this API key with project ID %s:\n", res.ProjectId))
+		}
 
 		for _, service := range res.FoundServices {
 			baseMsg := fmt.Sprintf(" - %s.googleapis.com", service)
@@ -144,7 +148,9 @@ func MarshalText(results []KeyResult, keys []string, targetApi string, timingEna
 			buf.WriteString("\n")
 		}
 
-		buf.WriteString(fmt.Sprintf("All discovery endpoint tests completed with %d failures.\n", res.FailCount))
+		if !res.IsProjectNumber {
+			buf.WriteString(fmt.Sprintf("All discovery endpoint tests completed with %d failures.\n", res.FailCount))
+		}
 
 		if timingEnabled {
 			buf.WriteString(fmt.Sprintf("Longest running service - %v\n\n\n", res.MaxTime))

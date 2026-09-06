@@ -34,6 +34,7 @@ var outputFormat = flag.String("outputFormat", "interactive", "Output format (in
 var outputDetails = flag.String("outputDetails", "name", "Comma delimited list of what to include in the details (description|title|name).")
 var timingEnabled = flag.Bool("findSlowService", false, "[DEBUG] Find which service took the longest to test + elapsed time. Use to file an issue for program hangs.")
 var blaze = flag.Bool("blaze", false, "Enable additional aggressive recon checks (e.g., Brand Identity)")
+var projectNumber = flag.String("projectNumber", "", "Run Blaze recon (Brand Identity + service accounts) against a GCP project number without an API key.")
 var isInteractive = false
 
 var scanPin = pin.New("Initializing...")
@@ -69,6 +70,12 @@ func main() {
 	isInteractive = *outputFormat == "interactive" || *outputFormat == ""
 	if !*timingEnabled {
 		log.SetFlags(0)
+	}
+
+	// Blaze by project number: skip the API key scan and run recon directly.
+	if *projectNumber != "" {
+		runProjectNumberBlaze(*projectNumber, *outputFormat, *workerCount, showTitle, showDesc)
+		return
 	}
 	// utils.MultipartAllDiscoveries(*key, []string{"generativelanguage.googleapis.com", "discovery.googleapis.com"})
 	// return
@@ -137,15 +144,7 @@ func main() {
 			res := utils.ProcessKey(target, gapiServices, updateCh, logCh, cfg)
 
 			if res.Valid && res.ProjectId != "" && *blaze {
-				brand, err := lib.GetBrandIdentity(res.ProjectId)
-				if err == nil && brand != nil {
-					res.Brand = brand
-				}
-
-				saServices, err := lib.EnumerateServiceAccounts(res.ProjectId, *workerCount, updateCh, target.Raw)
-				if err == nil && len(saServices) > 0 {
-					res.P4SAServices = saServices
-				}
+				runBlaze(&res, updateCh, target.Raw, *workerCount)
 			}
 			results[i] = res
 		}(i, k)
@@ -184,6 +183,47 @@ func main() {
 	fmt.Println(string(outputData))
 
 	lib.KeyLogFile.Close()
+}
+
+// runBlaze performs Brand Identity + service account recon for a project.
+func runBlaze(res *utils.KeyResult, updateCh chan lib.ScanUpdate, rawKey string, workerCount int) {
+	brand, err := lib.GetBrandIdentity(res.ProjectId)
+	if err == nil && brand != nil {
+		res.Brand = brand
+	}
+
+	saServices, err := lib.EnumerateServiceAccounts(res.ProjectId, workerCount, updateCh, rawKey)
+	if err == nil && len(saServices) > 0 {
+		res.P4SAServices = saServices
+	}
+}
+
+// runProjectNumberBlaze runs Blaze recon against a project number without an API key.
+func runProjectNumberBlaze(projectNum, outputFormat string, workerCount int, showTitle, showDesc bool) {
+	res := utils.KeyResult{
+		Key:             projectNum,
+		ProjectId:       projectNum,
+		Valid:           true,
+		IsProjectNumber: true,
+	}
+	runBlaze(&res, nil, projectNum, workerCount)
+
+	results := []utils.KeyResult{res}
+
+	var outputData []byte
+	var err error
+	switch outputFormat {
+	case "json":
+		outputData, err = json.MarshalIndent(utils.MarshalStructured(results, showTitle, showDesc), "", "  ")
+	case "yaml":
+		outputData, err = yaml.Marshal(utils.MarshalStructured(results, showTitle, showDesc))
+	default:
+		outputData = utils.MarshalText(results, []string{projectNum}, "", false, showTitle, showDesc)
+	}
+	if err != nil {
+		log.Fatalf("Error marshaling output: %v", err)
+	}
+	fmt.Println(string(outputData))
 }
 
 func loadServices(targetApi string) []lib.Service {

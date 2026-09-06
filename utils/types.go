@@ -3,15 +3,16 @@ package utils
 import lib "github.com/bedros-p/fireblazer/lib"
 
 type KeyResult struct {
-	Key           string
-	ProjectId     string
-	Valid         bool
-	InvalidReason error
-	FoundServices []string
-	FailCount     int
-	MaxTime       *lib.ElapsedCombo
-	Brand         map[string]interface{}
-	P4SAServices  []string
+	Key             string
+	ProjectId       string
+	Valid           bool
+	InvalidReason   error
+	FoundServices   []string
+	FailCount       int
+	MaxTime         *lib.ElapsedCombo
+	Brand           map[string]interface{}
+	P4SAServices    []string
+	IsProjectNumber bool
 }
 
 type ServiceDetail struct {

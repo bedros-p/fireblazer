@@ -44,7 +44,7 @@ func EnumerateServiceAccounts(projectNum string, workerCount int, updateCh chan 
 				statusCode := resp.StatusCode
 				resp.Body.Close()
 
-				if statusCode == 200 || statusCode == 403 {
+				if statusCode == 200 || statusCode == 403 { // lowk i should flag an extra thing if it *is* 200...
 					mu.Lock()
 					foundProducts = append(foundProducts, product)
 					mu.Unlock()
