@@ -158,23 +158,6 @@ The key cannot(?) hit those services, it is only useful for recon on the project
 
 You can enable these checks for those scans if you like it with the -blaze flag.
 
-### Fiery Blaze [WIP - NOT IMPLEMENTED]
-> We can't stop here, this is bat country!
-
-It can do more. This project was originally made for Firebase enumeration. You can have "post-exploitation" steps to dig deeper into any Firebase matches, but this causes real API requests that actually read and all. If you'd like to be caught here in a fiery blaze, use --batcountry.
-
-- Starting from your identitytoolkit response + the blazing...
-- If it can find an appspot.com / firebase.app / web.app / run.app mention in there, it can use the project name. It's pretty easy after that for Firebase. But a good amount of stuff don't use proj name.
-- Else... I gotta find other service escalation paths. There are plenty of paths one could take, I'm not sure which one to add first though.
-- Firebase RTDB
-- Firebase Remote Config
-- Firebase config retrieval
-- Everything it cacn hit in firebase, it will. 
-
-!! It's way more aggressive. It is also highly experimental. In this specific commit, it is NOT IMPLEMENTED !!
-
-Why "bat country"? Imagine the sky is suddenly filled with massive, swooping, and screeching bats and flying manta rays. Well, this is what this mode is like. It issues requests like crazy and actually interacts with the project functionality with the API key. All the other functionality in this project uses stuff that isn't too related to the API key or is generally stealthier. This will hit Firebase and AppEngine directly. You will be caught in a fiery blaze by Fireblazer. This (along with the project name) is totally, definitely, absolutely 10000% not a reference to the song, Bat Country. Believe me pls. Pester me on Twitter if you want this done faster. Or submit a PR.
-
 ## Notes 
 
 Uses HTTP3 (QUIC) for less cancelled / retransmitted requests, it's faster. On inferior versions, this would retransmit lots of packets unnecessarily. You can test out the error rate by switching out http3.Transport to a regular http.Transport in `client.go`
