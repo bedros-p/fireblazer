@@ -7,34 +7,36 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
+	"github.com/bedros-p/fireblazer/lib/trace"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 )
-
-var KeyLogFile os.File
 
 // TODO: experiment with quic-go params https://quic-go.net/docs/quic/flowcontrol/#configuring-limits
 // If we're consistently sending 439 endpoint discovery reqs and expecting all those responses all the time, we might be able to tweak it a little...
 // But at this stage it's lowk a gamble ?
 
+type keyLogFile struct{}
+
+func (keyLogFile) Close() error {
+	return trace.Close()
+}
+
+var KeyLogFile keyLogFile
 var StoredResolvedAddr *net.UDPAddr
 
 var GetClient = sync.OnceValue(func() *http.Client {
-	// TODO: Buildtime / runtime flags to enable snooping. I want a dev branch one day that has all sorts of logging eventually but idw pollute the code yet
-	// KeyLogFile, _ := os.Create("ssl_keys.log") // If you want to read the traffic and debug issues with Wireshark, uncomment this.
-
 	return &http.Client{
 		Transport: &http3.Transport{
 			EnableDatagrams: true,
 			TLSClientConfig: &tls.Config{
 				// InsecureSkipVerify: true,
-				// KeyLogWriter:       KeyLogFile,
-				ServerName: "googleapis.com",
-				NextProtos: []string{http3.NextProtoH3},
+				KeyLogWriter: trace.KeyLogWriter(),
+				ServerName:   "googleapis.com",
+				NextProtos:   []string{http3.NextProtoH3},
 			},
 			Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 				hostAddr, _ := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
