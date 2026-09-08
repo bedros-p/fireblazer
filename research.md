@@ -855,3 +855,13 @@ These either don't start with `service-` or don't include the standard `iam.gser
 ----
 
 pretty good, but i should note that some are enabled by default for all gcp projects with no ties to anything else. Mainly service-agent-manager and 
+
+POST https://cloudresourcemanager.googleapis.com/v1/projects/PROJECT_ID:testIamPermissions
+{
+  "permissions":  [
+    "resourcemanager.projects.get",
+    "..."
+    "resourcemanager.projects.delete"
+  ]
+}
+
