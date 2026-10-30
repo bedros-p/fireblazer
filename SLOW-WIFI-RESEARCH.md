@@ -342,9 +342,9 @@ Environment knobs: `FB_KEYS`, `FB_CONNS`, `FB_PORTS`, `FB_CONSUMERS`,
 ## 9. Live re-test: new network, 2026-10-30
 
 Connection: 12-thread Ryzen 5 5500U, campus Wi-Fi, ~16 ms TCP connect,
-~3.5 MB/s path, no IPv6 route. All tests use 100 throwaway `AIza...` keys
-(43,500 discovery requests) against live GFE, `-dangerouslySkipVerification`,
-JSON output, 0-RTT disabled by a fresh process.
+`speedtest-cli` 64.8 Mbit/s down / 81.5 Mbit/s up, no IPv6 route. Tests use
+throwaway `AIza...` keys against live GFE, `-dangerouslySkipVerification`,
+JSON output, no persisted TLS sessions.
 
 ### 9.1 The 24-second key is two 10-second hangs
 
@@ -373,12 +373,12 @@ run.
 
 | Case | Base (`optimization-impl` HEAD) | Optimized | Old claim |
 |---|---:|---:|---:|
-| 1 key / 430 requests | 23.4–25.2 s | 2.0–2.2 s | 1.52–1.72 s |
-| 5 keys / 2,150 requests | 26.3–26.8 s | 3.0–4.3 s | — |
-| 100 keys / 43,500 requests | aborted after ~6 min | **3.4–4.6 s** | ~8.5 s |
-| 300 keys / 129,000 requests | — | **6.96–10.08 s** | 11.56 s (127.8k) |
-| Throughput, best run | — | **18.5k req/s** (300 keys) | 4,660 req/s (50k) |
-| Failures | 6 per key | **0** | 0 |
+| 1 key / 430 requests | 23.4–25.2 s | **2.0–2.2 s** | 1.52–1.72 s |
+| 5 keys / 2,150 requests | 26.3–26.8 s | **3.0–4.3 s** | — |
+| 100 keys / 43,500 requests | aborted after ~6 min | **3.4–4.9 s** | ~8.5 s |
+| 300 keys / 129,000 requests | — | **6.8–7.9 s** | 11.56 s (127.8k) |
+| 1M requests / 1,000,180 | — | **68.9 s** (45 failures) | 8.3 s |
+| Throughput, 300 keys | — | **16.3–19.0k req/s** | 4,660 req/s (50k) |
 
 The base 100-key run never produced output: after its serialized handshakes
 failed, it fell back to resolving every service host for every key and wrote
@@ -388,13 +388,31 @@ corpus problem.
 The optimized single-key run is bounded by one real slow endpoint
 (`areainsights.googleapis.com`). A plain `curl` HEAD against it takes
 1.47–1.51 s on this link on every try, so 1.5 s is the floor for any
-single-key scan that waits for all endpoints. The 100-key run is bounded by
-GFE latency and response tails, not client CPU. At 300 keys the CPU cost is
-16.4–16.8 s / 129k requests = **127–130 µs per request** including 250–300
-handshakes, which is exactly the §2 GFE cost (128.4 µs/req). That is ~93k
-req/s of client capacity on 12 threads; the wall time is network-bound. The
-documented 121k is the same CPU wall on faster silicon, not a client-side
-win that is still available.
+single-key scan that waits for all endpoints.
+
+### 9.2.1 Why 1M is not 8.3 s here
+
+The 1M run is link-bound, not client-bound. `512 keys × 430 endpoints`
+($N=1{,}000{,}180$) used 115–126 s of CPU, i.e. **115–126 µs/request**, the
+same §2 GFE cost. On 12 threads that is a 95–104k req/s client ceiling, so
+the client alone could do 1M in ~10 s. The wall is the wire:
+
+- Measured with `/sys/class/net/wlan0/statistics` over 129k requests:
+  **51.37 MB RX + 35.25 MB TX = 671.5 B/request** (398 B RX, 273 B TX).
+- `speedtest-cli`: **64.8 Mbit/s down / 81.5 Mbit/s up** (full duplex).
+- Downlink ceiling at 398 B/req: **20.3k req/s**. Uplink: 37.3k req/s.
+- 1M needs 398 MB down / 8.1 MB/s = **49 s minimum** on the downlink alone;
+  measured 57.7–68.9 s, i.e. 71–85 % of that floor.
+- The old 1M/8.3 s claim is 646 Mbit/s of combined traffic (4.4× this link).
+- 400k req/s at 671.5 B/req is **1.27 Gbit/s down + 0.87 Gbit/s up**
+  (2.15 Gbit/s combined, 15× this uplink) and would also need ~30 µs of CPU
+  per request (12/400k), about 4× less than this client uses.
+
+So the ~400k/s figure is a Wi-Fi PHY / LAN ceiling, not a property of the
+internet path to GFE; GFE traffic crosses the campus uplink. On a ≥650 Mbit/s
+path this client would be CPU-bound at ~10–11 s for 1M, close to the
+documented 8.3 s. The 121k claim is a fast-path number, not reachable from
+this connection.
 
 ### 9.3 What was applied
 
@@ -402,14 +420,16 @@ win that is still available.
   4 UDP sockets; round-robin, lock-free selection; handshakes run
   concurrently instead of under the old global mutex.
 - Decoupled dispatch/read pipeline in `lib/enumeration.go`: send all 430
-  requests first, read statuses on up to 64 consumers per key, cancel the
+  requests first, read statuses on up to 8 consumers per key, cancel the
   body after the HEADERS frame, and `Close()` the send half immediately.
-- 3 s per-stream deadline; no retry storm. 6-host static blacklist plus
-  in-process auto-blacklist after two timeouts.
+- 5 s per-stream deadline; no retry storm. 6-host static blacklist. An
+  in-process auto-blacklist was tried and removed: at 1M concurrency, link
+  saturation produced >3 s tails and it wrongly skipped healthy hosts.
 - Endpoint parsing and key appending happen once per key; headers and the
   request object are reused across all endpoints of that key.
-- Batch keys still run concurrently (up to 128), so the pool is shared
-  instead of one connection per key.
+- Batch keys run concurrently (up to 512), so the pool is shared instead of
+  one connection per key. 512 bounds RSS at ~371 MB for 2,326 keys; an
+  unbounded run reached ~905 MB.
 
 Caveats: campus Wi-Fi latency moved ±30 % between runs; `areainsights` added
 ~1.5 s to some single-key runs. Absolute wall times are not stable, but the

@@ -3,7 +3,6 @@ package fireblazer
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,7 +11,6 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,31 +34,12 @@ var HangingDiscoveryHosts = map[string]struct{}{
 	"workloadcertificate.googleapis.com":      {},
 }
 
-// Endpoints that timed out twice in this process are skipped for the rest of
-// the run, so a host that starts hanging mid-batch costs one key, not all.
-var autoHangingHosts sync.Map
-
 func IsHangingHost(host string) bool {
-	if _, ok := HangingDiscoveryHosts[host]; ok {
-		return true
-	}
-	_, ok := autoHangingHosts.Load(host)
+	_, ok := HangingDiscoveryHosts[host]
 	return ok
 }
 
-var timeoutStrikes sync.Map // host -> *atomic.Int32
-
-func noteEndpointTimeout(host string) bool {
-	v, _ := timeoutStrikes.LoadOrStore(host, new(atomic.Int32))
-	if v.(*atomic.Int32).Add(1) >= 2 {
-		if _, loaded := autoHangingHosts.LoadOrStore(host, struct{}{}); !loaded {
-			return true
-		}
-	}
-	return false
-}
-
-const streamDeadline = 3 * time.Second
+const streamDeadline = 5 * time.Second
 
 type TargetKey struct {
 	Raw         string
@@ -311,7 +290,7 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 		}
 	}
 
-	readers := min(workerCount, 64, len(endpoints))
+	readers := min(workerCount, 8, len(endpoints))
 	if readers < 1 {
 		readers = 1
 	}
@@ -336,11 +315,6 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 
 				if err != nil {
 					failCount.Add(1)
-					if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-						if noteEndpointTimeout(endpointHost(p.host)) {
-							log.Printf("Discovery endpoint %s timed out twice; skipping it for the rest of this run", p.host)
-						}
-					}
 					p.stream.Close()
 					emit(p.cleanName, false)
 					continue
@@ -359,7 +333,7 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 		}()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	for i := range endpoints {
