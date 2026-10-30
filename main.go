@@ -125,13 +125,27 @@ func main() {
 		updateCh, logCh, updateDone = startInteractiveDisplay(keys, totalServicesCount, *referrer)
 	}
 
+	var totalExpectedReqs = len(keys) * len(gapiServices)
+	pool, poolErr := lib.GetH3ConnectionPool(totalExpectedReqs)
+	if poolErr != nil {
+		log.Printf("Warning: could not pre-warm HTTP/3 connection pool: %v", poolErr)
+	} else {
+		defer pool.Close()
+	}
+
 	var wg sync.WaitGroup
 	results := make([]utils.KeyResult, len(keys))
 
+	keyWorkerLimit := min(len(keys), 128)
+	keySem := make(chan struct{}, keyWorkerLimit)
+
 	for i, k := range keys {
 		wg.Add(1)
+		keySem <- struct{}{}
 		go func(i int, rawKey string) {
 			defer wg.Done()
+			defer func() { <-keySem }()
+
 			target := utils.ParseTargetKey(rawKey, *referrer)
 			cfg := utils.ProcessConfig{
 				DangerouslySkipVerification: *dangerouslySkipVerification,
@@ -140,6 +154,7 @@ func main() {
 				WorkerCount:                 *workerCount,
 				TimingEnabled:               *timingEnabled,
 				UseGet:                      *targetApi != "",
+				Pool:                        pool,
 			}
 			res := utils.ProcessKey(target, gapiServices, updateCh, logCh, cfg)
 
@@ -254,7 +269,7 @@ func loadServices(targetApi string) []lib.Service {
 }
 
 func startInteractiveDisplay(keys []string, totalServices int, globalReferrer string) (chan lib.ScanUpdate, chan string, chan struct{}) {
-	updateCh := make(chan lib.ScanUpdate, *workerCount*len(keys))
+	updateCh := make(chan lib.ScanUpdate, totalServices*len(keys))
 	logCh := make(chan string, len(keys)*3)
 	updateDone := make(chan struct{})
 

@@ -15,6 +15,7 @@ type ProcessConfig struct {
 	WorkerCount                 int
 	TimingEnabled               bool
 	UseGet                      bool
+	Pool                        *lib.H3ConnectionPool
 }
 
 func ParseTargetKey(raw string, globalRef string) lib.TargetKey {
@@ -73,7 +74,7 @@ func ProcessKey(target lib.TargetKey, gapiServices []lib.Service, updateCh chan 
 		res.Valid = true
 	}
 
-	foundServices, failCount, maxTime := lib.ScanServices(target, gapiServices, cfg.WorkerCount, cfg.TimingEnabled, updateCh, cfg.UseGet)
+	foundServices, failCount, maxTime := lib.ScanServicesWithPool(target, gapiServices, cfg.WorkerCount, cfg.TimingEnabled, updateCh, cfg.UseGet, cfg.Pool)
 	res.FoundServices = foundServices
 	res.FailCount = failCount
 	res.MaxTime = maxTime
