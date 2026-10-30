@@ -376,7 +376,8 @@ run.
 | 1 key / 430 requests | 23.4–25.2 s | 2.0–2.2 s | 1.52–1.72 s |
 | 5 keys / 2,150 requests | 26.3–26.8 s | 3.0–4.3 s | — |
 | 100 keys / 43,500 requests | aborted after ~6 min | **3.4–4.6 s** | ~8.5 s |
-| Throughput, best run | — | **12.6k req/s** | 4,660 req/s (50k) |
+| 300 keys / 129,000 requests | — | **6.96–10.08 s** | 11.56 s (127.8k) |
+| Throughput, best run | — | **18.5k req/s** (300 keys) | 4,660 req/s (50k) |
 | Failures | 6 per key | **0** | 0 |
 
 The base 100-key run never produced output: after its serialized handshakes
@@ -385,11 +386,15 @@ failed, it fell back to resolving every service host for every key and wrote
 corpus problem.
 
 The optimized single-key run is bounded by one real slow endpoint
-(`areainsights.googleapis.com`, 1.5 s), not a hang. The 100-key run is bounded
-by GFE latency and response tails, not client CPU: ~6.6 s CPU / 43.5k requests
-≈ 152 µs per request including 250 handshakes, or ~79k req/s of client
-capacity on 12 threads. The documented 121k needs the raw-client path from
-§2.2; it is not reachable through `http3.ClientConn`.
+(`areainsights.googleapis.com`). A plain `curl` HEAD against it takes
+1.47–1.51 s on this link on every try, so 1.5 s is the floor for any
+single-key scan that waits for all endpoints. The 100-key run is bounded by
+GFE latency and response tails, not client CPU. At 300 keys the CPU cost is
+16.4–16.8 s / 129k requests = **127–130 µs per request** including 250–300
+handshakes, which is exactly the §2 GFE cost (128.4 µs/req). That is ~93k
+req/s of client capacity on 12 threads; the wall time is network-bound. The
+documented 121k is the same CPU wall on faster silicon, not a client-side
+win that is still available.
 
 ### 9.3 What was applied
 
