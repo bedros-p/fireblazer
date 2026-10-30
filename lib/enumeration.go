@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"golang.org/x/sync/errgroup"
@@ -159,7 +160,8 @@ type ScanUpdate struct {
 type preparedEndpoint struct {
 	cleanName string
 	host      string
-	url       url.URL
+	scheme    string
+	uri       string
 }
 
 func endpointHost(raw string) string {
@@ -207,10 +209,18 @@ func prepareEndpoints(target TargetKey, services []Service) []preparedEndpoint {
 		if scheme == "" {
 			scheme = "https"
 		}
+		uri := u.EscapedPath()
+		if uri == "" {
+			uri = "/"
+		}
+		if query != "" {
+			uri += "?" + query
+		}
 		out = append(out, preparedEndpoint{
 			cleanName: s.CleanName,
 			host:      u.Host,
-			url:       url.URL{Scheme: scheme, Path: path, RawQuery: query},
+			scheme:    scheme,
+			uri:       uri,
 		})
 	}
 	return out
@@ -218,8 +228,7 @@ func prepareEndpoints(target TargetKey, services []Service) []preparedEndpoint {
 
 type pendingStream struct {
 	cleanName string
-	host      string
-	stream    *http3.RequestStream
+	stream    *quic.Stream
 	start     time.Time
 }
 
@@ -254,23 +263,22 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 	if useGet {
 		method = http.MethodGet
 	}
-	headers := make(http.Header, 5)
+	extra := make([]qpack.HeaderField, 0, 5)
 	if !useGet {
-		headers.Set("X-HTTP-Method-Override", "GET")
+		extra = append(extra, qpack.HeaderField{Name: "x-http-method-override", Value: "GET"})
 	}
 	if target.Referrer != "" {
-		headers.Set("Referer", target.Referrer)
+		extra = append(extra, qpack.HeaderField{Name: "referer", Value: target.Referrer})
 	}
 	if target.IosBundleId != "" {
-		headers.Set("X-Ios-Bundle-Identifier", target.IosBundleId)
+		extra = append(extra, qpack.HeaderField{Name: "x-ios-bundle-identifier", Value: target.IosBundleId})
 	}
 	if target.AndroidPkg != "" {
-		headers.Set("X-Android-Package", target.AndroidPkg)
+		extra = append(extra, qpack.HeaderField{Name: "x-android-package", Value: target.AndroidPkg})
 	}
 	if target.AndroidCert != "" {
-		headers.Set("X-Android-Cert", target.AndroidCert)
+		extra = append(extra, qpack.HeaderField{Name: "x-android-cert", Value: target.AndroidCert})
 	}
-	req := &http.Request{Method: method, Header: headers}
 
 	pending := make(chan pendingStream, len(endpoints))
 
@@ -290,7 +298,7 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 		}
 	}
 
-	readers := min(workerCount, 8, len(endpoints))
+	readers := min(workerCount, 64, len(endpoints))
 	if readers < 1 {
 		readers = 1
 	}
@@ -300,9 +308,10 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 	for range readers {
 		go func() {
 			defer readWg.Done()
+			var scratch []byte
 			for p := range pending {
-				_ = p.stream.SetDeadline(time.Now().Add(streamDeadline))
-				resp, err := p.stream.ReadResponse()
+				_ = p.stream.SetReadDeadline(time.Now().Add(streamDeadline))
+				status, err := readStatus(p.stream, &scratch)
 
 				if timingEnabled {
 					elapsed := time.Since(p.start).Milliseconds()
@@ -315,12 +324,12 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 
 				if err != nil {
 					failCount.Add(1)
-					p.stream.Close()
+					p.stream.CancelRead(quic.StreamErrorCode(http3.ErrCodeNoError))
 					emit(p.cleanName, false)
 					continue
 				}
 
-				found := resp.StatusCode == http.StatusOK
+				found := status == http.StatusOK
 				// The status is in memory now; stop the body before it is read.
 				p.stream.CancelRead(quic.StreamErrorCode(http3.ErrCodeNoError))
 				if found {
@@ -336,10 +345,11 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	var hdrBuf bytes.Buffer
+	enc := qpack.NewEncoder(&hdrBuf)
+	var frame []byte
 	for i := range endpoints {
 		ep := &endpoints[i]
-		req.URL = &ep.url
-		req.Host = ep.host
 
 		conn := pool.GetNextConn()
 		if conn == nil {
@@ -353,14 +363,16 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 			start = time.Now()
 		}
 
-		stream, err := conn.OpenRequestStream(ctx)
+		stream, err := conn.conn.OpenStreamSync(ctx)
 		if err != nil {
 			failCount.Add(1)
 			emit(ep.cleanName, false)
 			continue
 		}
-		if err := stream.SendRequestHeader(req); err != nil {
+		frame = encodeRequest(enc, &hdrBuf, &frame, method, ep.scheme, ep.host, ep.uri, extra)
+		if _, err := stream.Write(frame); err != nil {
 			failCount.Add(1)
+			stream.CancelWrite(quic.StreamErrorCode(http3.ErrCodeNoError))
 			stream.Close()
 			emit(ep.cleanName, false)
 			continue
@@ -371,7 +383,6 @@ func ScanServicesWithPool(target TargetKey, gapiServices []Service, workerCount 
 
 		pending <- pendingStream{
 			cleanName: ep.cleanName,
-			host:      ep.host,
 			stream:    stream,
 			start:     start,
 		}

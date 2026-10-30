@@ -136,7 +136,7 @@ func main() {
 	var wg sync.WaitGroup
 	results := make([]utils.KeyResult, len(keys))
 
-	keyWorkerLimit := min(len(keys), 512)
+	keyWorkerLimit := min(len(keys), 128)
 	keySem := make(chan struct{}, keyWorkerLimit)
 
 	for i, k := range keys {

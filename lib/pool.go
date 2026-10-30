@@ -29,14 +29,14 @@ const (
 // for handshakes once instead of once per key, and no single connection is
 // limited to 100 concurrent streams.
 type H3ConnectionPool struct {
-	conns      []*http3.ClientConn
+	conns      []*rawH3Conn
 	quicConns  []*quic.Conn
 	transports []*quic.Transport
 	sockets    []*net.UDPConn
 	next       atomic.Uint64
 }
 
-func (p *H3ConnectionPool) GetNextConn() *http3.ClientConn {
+func (p *H3ConnectionPool) GetNextConn() *rawH3Conn {
 	if p == nil || len(p.conns) == 0 {
 		return nil
 	}
@@ -205,18 +205,26 @@ func NewH3ConnectionPool(totalRequests int) (*H3ConnectionPool, error) {
 		return nil, errNoPoolConns
 	}
 
-	pool.conns = make([]*http3.ClientConn, 0, ok)
+	pool.conns = make([]*rawH3Conn, 0, ok)
 	pool.quicConns = make([]*quic.Conn, 0, ok)
 	for _, c := range ordered {
 		if c == nil {
 			continue
 		}
-		h3tr := &http3.Transport{}
-		pool.conns = append(pool.conns, h3tr.NewClientConn(c))
+		raw, err := newRawH3Conn(c)
+		if err != nil {
+			c.CloseWithError(0, "raw HTTP/3 init failed")
+			continue
+		}
+		pool.conns = append(pool.conns, raw)
 		pool.quicConns = append(pool.quicConns, c)
 	}
-	if ok < conns {
-		log.Printf("HTTP/3 pool: %d/%d connections established, continuing with %d", ok, conns, ok)
+	if len(pool.conns) == 0 {
+		pool.Close()
+		return nil, errNoPoolConns
+	}
+	if ok < conns || len(pool.conns) < ok {
+		log.Printf("HTTP/3 pool: %d/%d connections established, continuing with %d", len(pool.conns), conns, len(pool.conns))
 	}
 	return pool, nil
 }

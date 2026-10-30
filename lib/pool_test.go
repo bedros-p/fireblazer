@@ -3,6 +3,7 @@ package fireblazer
 import (
 	"net/url"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -57,17 +58,17 @@ func TestPrepareEndpoints(t *testing.T) {
 		if ep.cleanName == "hangs" {
 			t.Fatal("hanging host was not filtered")
 		}
-		if ep.url.Scheme != "https" {
-			t.Errorf("%s: scheme = %q", ep.cleanName, ep.url.Scheme)
+		if ep.scheme != "https" {
+			t.Errorf("%s: scheme = %q", ep.cleanName, ep.scheme)
 		}
 		if ep.host == "" {
 			t.Errorf("%s: empty host", ep.cleanName)
 		}
-		if ep.cleanName == "withquery" && ep.url.RawQuery != wantQuery {
-			t.Errorf("query = %q, want %q", ep.url.RawQuery, wantQuery)
+		if ep.cleanName == "withquery" && !strings.HasSuffix(ep.uri, "?"+wantQuery) {
+			t.Errorf("uri = %q, want suffix %q", ep.uri, wantQuery)
 		}
-		if ep.cleanName == "bare" && ep.url.Path != "/$discovery/rest" {
-			t.Errorf("bare path = %q", ep.url.Path)
+		if ep.cleanName == "bare" && !strings.HasPrefix(ep.uri, "/$discovery/rest?") {
+			t.Errorf("bare uri = %q", ep.uri)
 		}
 	}
 }

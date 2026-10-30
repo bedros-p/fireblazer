@@ -375,10 +375,10 @@ run.
 |---|---:|---:|---:|
 | 1 key / 430 requests | 23.4–25.2 s | **2.0–2.2 s** | 1.52–1.72 s |
 | 5 keys / 2,150 requests | 26.3–26.8 s | **3.0–4.3 s** | — |
-| 100 keys / 43,500 requests | aborted after ~6 min | **3.4–4.9 s** | ~8.5 s |
-| 300 keys / 129,000 requests | — | **6.8–7.9 s** | 11.56 s (127.8k) |
-| 1M requests / 1,000,180 | — | **68.9 s** (45 failures) | 8.3 s |
-| Throughput, 300 keys | — | **16.3–19.0k req/s** | 4,660 req/s (50k) |
+| 100 keys / 43,500 requests | aborted after ~6 min | **3.7–4.1 s** | ~8.5 s |
+| 300 keys / 129,000 requests | — | **7.6 s** | 11.56 s (127.8k) |
+| 1M requests / 1,000,180 | — | **38.5–43.5 s** (45–171 timeouts) | 8.3 s |
+| Throughput, 1M | — | **23–26k req/s** | 4,660 req/s (50k) |
 
 The base 100-key run never produced output: after its serialized handshakes
 failed, it fell back to resolving every service host for every key and wrote
@@ -392,21 +392,21 @@ single-key scan that waits for all endpoints.
 
 ### 9.2.1 Why 1M is not 8.3 s here
 
-The 1M run is link-bound, not client-bound. `512 keys × 430 endpoints`
-($N=1{,}000{,}180$) used 115–126 s of CPU, i.e. **115–126 µs/request**, the
-same §2 GFE cost. On 12 threads that is a 95–104k req/s client ceiling, so
-the client alone could do 1M in ~10 s. The wall is the wire:
+The 1M run is link-bound, not client-bound. `2,326 keys × 430 endpoints`
+($N=1{,}000{,}180$) used 87–88 s of CPU, i.e. **87 µs/request** after the raw
+H3 path. On 12 threads that is a **138k req/s client ceiling**, so the client
+alone could do 1M in ~7.2 s. The wall is the wire:
 
-- Measured with `/sys/class/net/wlan0/statistics` over 129k requests:
-  **51.37 MB RX + 35.25 MB TX = 671.5 B/request** (398 B RX, 273 B TX).
+- Measured with `/sys/class/net/wlan0/statistics` over 2,000,360 requests on
+  the raw path: **381.5 B RX + 241.1 B TX = 622.6 B/request**.
 - `speedtest-cli`: **64.8 Mbit/s down / 81.5 Mbit/s up** (full duplex).
-- Downlink ceiling at 398 B/req: **20.3k req/s**. Uplink: 37.3k req/s.
-- 1M needs 398 MB down / 8.1 MB/s = **49 s minimum** on the downlink alone;
-  measured 57.7–68.9 s, i.e. 71–85 % of that floor.
-- The old 1M/8.3 s claim is 646 Mbit/s of combined traffic (4.4× this link).
-- 400k req/s at 671.5 B/req is **1.27 Gbit/s down + 0.87 Gbit/s up**
-  (2.15 Gbit/s combined, 15× this uplink) and would also need ~30 µs of CPU
-  per request (12/400k), about 4× less than this client uses.
+- Downlink ceiling at 381.5 B/req: **21.2k req/s**. Uplink: 42.3k req/s.
+- 1M needs 381.5 MB down / 8.1 MB/s = **47 s minimum** on the downlink alone;
+  measured 38.5–43.5 s, so the path peaks above the speedtest figure.
+- The old 1M/8.3 s claim is ~600 Mbit/s of combined traffic (4× this link).
+- 400k req/s at 622.6 B/req is **1.22 Gbit/s down + 0.77 Gbit/s up**
+  (2 Gbit/s combined) and would need ~35 cores at 87 µs/request
+  (400k × 87 µs); this laptop has 12.
 
 So the ~400k/s figure is a Wi-Fi PHY / LAN ceiling, not a property of the
 internet path to GFE; GFE traffic crosses the campus uplink. On a ≥650 Mbit/s
@@ -419,17 +419,30 @@ this connection.
 - `lib/pool.go`: process-wide pool of up to 250 pre-warmed connections over
   4 UDP sockets; round-robin, lock-free selection; handshakes run
   concurrently instead of under the old global mutex.
+- `lib/rawh3.go`: direct HTTP/3 over `quic.Conn`. Each request is one
+  QPACK-encoded HEADERS frame written straight to a QUIC stream; responses
+  are parsed for `:status` only, with no `http3.ClientConn`,
+  `RequestStream`, `http.Response`, or `MIMEHeader`. Per-connection control
+  and QPACK streams are opened once at pool creation.
 - Decoupled dispatch/read pipeline in `lib/enumeration.go`: send all 430
-  requests first, read statuses on up to 8 consumers per key, cancel the
+  requests first, read statuses on up to 64 consumers per key, cancel the
   body after the HEADERS frame, and `Close()` the send half immediately.
 - 5 s per-stream deadline; no retry storm. 6-host static blacklist. An
   in-process auto-blacklist was tried and removed: at 1M concurrency, link
   saturation produced >3 s tails and it wrongly skipped healthy hosts.
-- Endpoint parsing and key appending happen once per key; headers and the
-  request object are reused across all endpoints of that key.
-- Batch keys run concurrently (up to 512), so the pool is shared instead of
-  one connection per key. 512 bounds RSS at ~371 MB for 2,326 keys; an
-  unbounded run reached ~905 MB.
+- Endpoint parsing and key appending happen once per key; the raw path
+  encodes the four pseudo-headers plus the key's extra headers per request.
+- Batch keys run concurrently (up to 128), so the pool is shared instead of
+  one connection per key. 128 keys × 64 readers keeps RSS at ~230 MB for
+  2,326 keys; an unbounded run reached ~905 MB.
+
+Raw H3 parity and cost: 60/60 sampled endpoints reported the same status as
+the `http3.ClientConn` path. At 1M, CPU fell from 121–123 s to 87–88 s
+(123 → 87 µs/request), RSS from ~310 MB to ~235 MB, and request bytes from
+~273 to ~241 per request. Response bytes are unchanged because the server
+still uses static QPACK: `quic-go/qpack` has no dynamic decoder (server
+advertises 64 KiB capacity, but encoding it would need a full QPACK dynamic
+table implementation).
 
 Caveats: campus Wi-Fi latency moved ±30 % between runs; `areainsights` added
 ~1.5 s to some single-key runs. Absolute wall times are not stable, but the
